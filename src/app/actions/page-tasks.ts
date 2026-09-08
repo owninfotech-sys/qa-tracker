@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   canAddCases,
+  canChangeTaskStatus,
+  canCommentOnTask,
   canEditContent,
   canEditSla,
-  canWorkAssignedTask,
   isAdmin,
   requireSession,
 } from "@/lib/auth";
@@ -104,7 +105,7 @@ export async function updatePageTaskAction(formData: FormData) {
 
   const current = await findPageTaskById(id);
   if (!current) return;
-  if (status && !canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
+  if (status && !canChangeTaskStatus(session.role)) return;
   if (priority && !canEditContent(session.role)) return;
 
   await updatePageTask(id, {
@@ -141,7 +142,7 @@ export async function reorderPageTasksAction(formData: FormData) {
 
   const current = await findPageTaskById(id);
   if (!current || current.projectId !== projectId) return;
-  if (!canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
+  if (!canChangeTaskStatus(session.role)) return;
 
   const nextStatus = isPageTaskStatus(status) ? status : current.status;
 
@@ -255,7 +256,7 @@ export async function addPageTaskCommentAction(formData: FormData) {
   if (session.role === "FIXER" && !body) return;
 
   const current = await findPageTaskById(taskId);
-  if (!current || !canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
+  if (!current || !canCommentOnTask(session.role)) return;
 
   let saved: Awaited<ReturnType<typeof saveTaskUploads>> = [];
   try {

@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { findUserByEmail, findUserById } from "@/lib/data";
-import { isCustomRole, isRole, isSystemRole, type Role, type SessionUser } from "@/lib/types";
+import { isCustomRole, isRole, type Role, type SessionUser } from "@/lib/types";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET || "owninfotech-qa-tracker-dev-secret",
@@ -87,7 +87,7 @@ export function canManage(role: Role) {
 }
 
 export function canAddCases(role: Role) {
-  return role === "ADMIN";
+  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
 }
 
 export function canEditContent(role: Role) {
@@ -98,18 +98,16 @@ export function canEditSla(role: Role) {
   return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
 }
 
-export function canWorkAssignedTask(role: Role, assigneeId: string | string[] | null, userId: string) {
-  if (role === "ADMIN" || role === "TESTER" || isCustomRole(role)) return true;
-  const ids = Array.isArray(assigneeId) ? assigneeId : assigneeId ? [assigneeId] : [];
-  return role === "FIXER" && ids.includes(userId);
+export function canWorkAssignedTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  return canEditContent(role);
 }
 
-export function canCommentOnTask(role: Role, assigneeId: string | string[] | null, userId: string) {
-  return canWorkAssignedTask(role, assigneeId, userId);
+export function canCommentOnTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  return role === "ADMIN" || role === "TESTER" || role === "FIXER" || isCustomRole(role);
 }
 
-export function canChangeTaskStatus(role: Role, assigneeId: string | string[] | null, userId: string) {
-  return canWorkAssignedTask(role, assigneeId, userId);
+export function canChangeTaskStatus(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  return canEditContent(role);
 }
 
 export function canExecuteItem(role: Role, assigneeId: string | null, userId: string) {

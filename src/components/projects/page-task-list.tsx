@@ -391,7 +391,7 @@ export function PageTaskList({
                               pageId: task.pageId,
                               status: task.status,
                             }}
-                            canEdit={canEdit || (role === "FIXER" && task.assigneeIds.includes(currentUserId))}
+                            canEdit={canEdit}
                           />
                         </td>
                         <td className="whitespace-nowrap px-2 py-3 text-[#172b4d]">{formatListDate(task.createdAt)}</td>

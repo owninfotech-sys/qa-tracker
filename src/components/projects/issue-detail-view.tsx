@@ -190,6 +190,7 @@ export function IssueDetailView({
   canCreate,
   canAdmin,
   canWork,
+  canComment,
   role,
   currentUserId,
   currentUserName,
@@ -207,6 +208,7 @@ export function IssueDetailView({
   canCreate: boolean;
   canAdmin: boolean;
   canWork: boolean;
+  canComment: boolean;
   role: Role;
   currentUserId: string;
   currentUserName: string;
@@ -780,7 +782,7 @@ export function IssueDetailView({
                 ) : null}
               </div>
 
-              {canWork ? (
+              {canComment ? (
               <form
                 key={comments.length}
                 className="mt-6 rounded-[3px] border border-[#dcdfe4] bg-white"
@@ -890,7 +892,7 @@ export function IssueDetailView({
               ) : (
                 <p className="mt-6 text-sm text-[#626f86]">
                   {role === "FIXER"
-                    ? "You can comment after this work item is assigned to you."
+                    ? "You can view this work item and add a comment."
                     : "Comments are available on this work item."}
                 </p>
               )}

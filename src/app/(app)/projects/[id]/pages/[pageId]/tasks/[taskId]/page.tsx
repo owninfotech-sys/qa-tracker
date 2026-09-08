@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import {
   canAddCases,
+  canChangeTaskStatus,
+  canCommentOnTask,
   canEditContent,
   canEditSla,
-  canWorkAssignedTask,
   isAdmin,
   requireSession,
 } from "@/lib/auth";
@@ -67,7 +68,8 @@ export default async function IssueDetailPage({
         canEditSla={slaEdit}
         canCreate={canCreate}
         canAdmin={isAdmin(user.role)}
-        canWork={canWorkAssignedTask(user.role, parseAssigneeIds(task.assigneeIds, task.assigneeId), user.id)}
+        canWork={canChangeTaskStatus(user.role)}
+        canComment={canCommentOnTask(user.role)}
         role={user.role}
         currentUserId={user.id}
         currentUserName={user.name}

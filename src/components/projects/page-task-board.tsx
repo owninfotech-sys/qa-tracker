@@ -145,8 +145,8 @@ export function PageTaskBoard({
     return Array.from(map.entries()).map(([title, laneTasks]) => ({ id: title, title, tasks: laneTasks }));
   }, [group, visible]);
 
-  function canMove(task: ListTask) {
-    return canEdit || (role === "FIXER" && task.assigneeIds.includes(currentUserId));
+  function canMove(_task: ListTask) {
+    return canEdit;
   }
 
   function cardsInColumn(columnId: string, source: ListTask[] = items, excludeId?: string) {
