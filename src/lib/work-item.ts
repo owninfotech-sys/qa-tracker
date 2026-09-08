@@ -1,0 +1,22 @@
+export type ListTask = {
+  id: string;
+  taskKey: string;
+  projectId: string;
+  pageId: string;
+  pageName: string;
+  kind: string;
+  title: string;
+  details: string | null;
+  priority: string;
+  status: string;
+  createdAt: string;
+  reporterName: string;
+  assigneeId: string | null;
+  assigneeIds: string[];
+  assigneeName: string | null;
+  assigneeNames: string[];
+  commentCount: number;
+  resolutionAt: string | null;
+  sortOrder: number;
+  href: string;
+};

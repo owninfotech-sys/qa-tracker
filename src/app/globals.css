@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --blue: #1a73e8;
+  --blue-hover: #1558c0;
+  --blue-soft: #e8f0fe;
+  --blue-ink: #174ea6;
+  --black: #202124;
+  --muted: #5f6368;
+  --line: #dadce0;
+  --bg: #f8f9fa;
+  --white: #ffffff;
+  --danger: #d93025;
+  --danger-soft: #fce8e6;
+  --success: #188038;
+  --success-soft: #e6f4ea;
+  --warning: #e37400;
+  --warning-soft: #fef7e0;
+  --purple: #8430ce;
+  --purple-soft: #f3e8fd;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-blue: var(--blue);
+  --color-blue-hover: var(--blue-hover);
+  --color-blue-soft: var(--blue-soft);
+  --color-blue-ink: var(--blue-ink);
+  --color-ink: var(--black);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-page: var(--bg);
+  --color-card: var(--white);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-purple: var(--purple);
+  --color-purple-soft: var(--purple-soft);
+  --font-sans: var(--font-inter);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--black);
+  font-family: var(--font-inter), "Google Sans", system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--line);
+}
+
+::selection {
+  background: #d2e3fc;
+  color: var(--black);
+}
+
+input,
+select,
+textarea {
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.16);
 }
