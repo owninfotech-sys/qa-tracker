@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findTeamPeople } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { RoleBadge } from "@/components/ui/status-badge";
 import { initials } from "@/lib/format";
@@ -15,17 +15,7 @@ export default async function TeamPage({
   if (!canManage(user.role)) redirect("/");
   const { error } = await searchParams;
 
-  const people = await prisma.user.findMany({
-    include: {
-      assignedItems: {
-        where: { run: { status: "open" }, result: { in: ["pending", "in_progress"] } },
-      },
-      assignedFixes: {
-        where: { status: { in: ["open", "in_progress", "retest"] } },
-      },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const people = await findTeamPeople();
 
   return (
     <>

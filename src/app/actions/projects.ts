@@ -1,34 +1,19 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {
+  createPage,
+  createProject,
+  deletePage,
+  deleteProject,
+  findPages,
+  findProjectById,
+  mergeDuplicatePages,
+  updateProject,
+} from "@/lib/data";
 import { uniquePageNames } from "@/lib/pages";
-
-async function mergeDuplicatePages(projectId: string) {
-  const pages = await prisma.page.findMany({
-    where: { projectId },
-    orderBy: { id: "asc" },
-  });
-
-  const keep = new Map<string, string>();
-  for (const page of pages) {
-    const key = page.name.trim().toLowerCase();
-    const first = keep.get(key);
-    if (!first) {
-      keep.set(key, page.id);
-      continue;
-    }
-
-    await prisma.testCase.updateMany({
-      where: { pageId: page.id },
-      data: { pageId: first },
-    });
-    await prisma.page.delete({ where: { id: page.id } });
-  }
-}
 
 export async function createProjectAction(formData: FormData) {
   const session = await requireSession();
@@ -48,30 +33,17 @@ export async function createProjectAction(formData: FormData) {
 
   let project;
   try {
-    project = await prisma.project.create({
-      data: {
-        name,
-        type,
-        url: url || null,
-        rsvpUrl: rsvpUrl || null,
-        owner: { connect: { id: session.id } },
-        modules: {
-          create: [{ name: "General" }],
-        },
-        ...(pages.length
-          ? {
-              pages: {
-                create: pages.map((pageName) => ({ name: pageName })),
-              },
-            }
-          : {}),
-      },
+    project = await createProject({
+      name,
+      type,
+      url: url || null,
+      rsvpUrl: rsvpUrl || null,
+      ownerId: session.id,
+      pages,
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
-      redirect("/login?expired=1&error=Your%20session%20is%20out%20of%20date.%20Sign%20in%20again.");
-    }
-    throw error;
+    console.error("Could not create project", error);
+    redirect("/login?expired=1&error=Your%20session%20is%20out%20of%20date.%20Sign%20in%20again.");
   }
 
   redirect(`/projects/${project.id}`);
@@ -82,10 +54,7 @@ export async function archiveProjectAction(formData: FormData) {
   if (!canManage(session.role)) return;
 
   const id = String(formData.get("id") || "");
-  await prisma.project.update({
-    where: { id },
-    data: { status: "archived" },
-  });
+  await updateProject(id, { status: "archived" });
   revalidatePath("/projects");
 }
 
@@ -96,16 +65,7 @@ export async function deleteProjectAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
 
-  await prisma.$transaction(async (tx) => {
-    await tx.testRun.deleteMany({ where: { projectId: id } });
-    await tx.pageTaskComment.deleteMany({ where: { task: { projectId: id } } });
-    await tx.pageTask.updateMany({ where: { projectId: id }, data: { parentId: null } });
-    await tx.pageTask.deleteMany({ where: { projectId: id } });
-    await tx.testCase.deleteMany({ where: { projectId: id } });
-    await tx.page.deleteMany({ where: { projectId: id } });
-    await tx.module.deleteMany({ where: { projectId: id } });
-    await tx.project.delete({ where: { id } });
-  });
+  await deleteProject(id);
 
   revalidatePath("/projects");
   revalidatePath("/");
@@ -121,12 +81,9 @@ export async function updateProjectLinksAction(formData: FormData) {
   const rsvpUrl = String(formData.get("rsvpUrl") || "").trim();
   if (!id) return;
 
-  await prisma.project.update({
-    where: { id },
-    data: {
-      url: url || null,
-      rsvpUrl: rsvpUrl || null,
-    },
+  await updateProject(id, {
+    url: url || null,
+    rsvpUrl: rsvpUrl || null,
   });
 
   revalidatePath(`/projects/${id}`);
@@ -144,25 +101,20 @@ export async function addProjectPagesAction(formData: FormData) {
   ]);
   if (!projectId) return;
 
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  const project = await findProjectById(projectId);
   if (!project) {
     redirect(`/projects?error=Project%20not%20found`);
   }
 
   await mergeDuplicatePages(projectId);
 
-  const existing = await prisma.page.findMany({
-    where: { projectId },
-    select: { name: true },
-  });
+  const existing = await findPages(projectId);
   const taken = new Set(existing.map((page) => page.name.trim().toLowerCase()));
   const fresh = pages.filter((name) => !taken.has(name.toLowerCase()));
 
   try {
     for (const pageName of fresh) {
-      await prisma.page.create({
-        data: { projectId, name: pageName },
-      });
+      await createPage(projectId, pageName);
     }
   } catch (error) {
     console.error("Could not add pages", error);
@@ -182,11 +134,7 @@ export async function removeProjectPageAction(formData: FormData) {
   const pageId = String(formData.get("pageId") || "");
   if (!projectId || !pageId) return;
 
-  await prisma.testCase.updateMany({
-    where: { pageId },
-    data: { pageId: null },
-  });
-  await prisma.page.delete({ where: { id: pageId } });
+  await deletePage(pageId);
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/cases`);

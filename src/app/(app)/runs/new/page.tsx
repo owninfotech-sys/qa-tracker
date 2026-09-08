@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findActiveProjectsForRun, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { createRunAction } from "@/app/actions/runs";
 
@@ -13,16 +13,9 @@ export default async function NewRunPage({
   if (!canManage(user.role)) redirect("/");
   const { projectId, error } = await searchParams;
 
-  const projects = await prisma.project.findMany({
-    where: { status: "active" },
-    include: { cases: { include: { page: true }, where: { status: "ready" } } },
-    orderBy: { name: "asc" },
-  });
+  const projects = await findActiveProjectsForRun();
 
-  const testers = await prisma.user.findMany({
-    where: { active: true, role: "TESTER" },
-    orderBy: { name: "asc" },
-  });
+  const testers = await findUsers({ active: true, role: "TESTER", orderBy: "name" });
 
   const selected = projects.find((project) => project.id === projectId) ?? projects[0];
 

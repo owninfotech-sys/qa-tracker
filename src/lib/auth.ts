@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { findUserByEmail, findUserById } from "@/lib/data";
 import { isRole, type Role, type SessionUser } from "@/lib/types";
 
 const secret = new TextEncoder().encode(
@@ -54,9 +54,7 @@ export async function requireSession() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const user =
-    (await prisma.user.findUnique({ where: { id: session.id } })) ??
-    (await prisma.user.findUnique({ where: { email: session.email } }));
+  const user = (await findUserById(session.id)) ?? (await findUserByEmail(session.email));
 
   if (!user || !user.active || !isRole(user.role)) {
     redirect("/login?expired=1&error=Your%20session%20is%20out%20of%20date.%20Sign%20in%20again.");

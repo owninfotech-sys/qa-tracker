@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findMyWork } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
@@ -10,53 +10,8 @@ import { formatDate, isOverdue } from "@/lib/format";
 export default async function MyWorkPage() {
   const user = await requireSession();
 
-  const [myItems, myFixes, retests, overdueItems, unassignedFails, openRuns] =
-    await Promise.all([
-      prisma.runItem.findMany({
-        where: {
-          assigneeId: user.id,
-          run: { status: "open" },
-          result: { in: ["pending", "in_progress"] },
-        },
-        include: { case: { include: { page: true, project: true } }, run: true },
-        orderBy: { dueDate: "asc" },
-      }),
-      prisma.fixTask.findMany({
-        where: {
-          assigneeId: user.id,
-          status: { in: ["open", "in_progress"] },
-        },
-        include: {
-          runItem: { include: { case: { include: { project: true } } } },
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.fixTask.findMany({
-        where: {
-          status: "retest",
-          runItem: { assigneeId: user.id },
-        },
-        include: {
-          runItem: { include: { case: { include: { project: true } } } },
-        },
-      }),
-      prisma.runItem.findMany({
-        where: {
-          run: { status: "open" },
-          result: { in: ["pending", "in_progress"] },
-          dueDate: { lt: new Date() },
-        },
-        include: { assignee: true, case: { include: { project: true } } },
-      }),
-      prisma.fixTask.findMany({
-        where: { assigneeId: null, status: { in: ["open", "in_progress"] } },
-        include: { runItem: { include: { case: true } } },
-      }),
-      prisma.testRun.findMany({
-        where: { status: "open" },
-        include: { items: true, project: true },
-      }),
-    ]);
+  const { myItems, myFixes, retests, overdueItems, unassignedFails, openRuns } =
+    await findMyWork(user.id);
 
   const admin = canManage(user.role);
   const totalOpen = openRuns.reduce((sum, run) => sum + run.items.length, 0);

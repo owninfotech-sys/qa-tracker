@@ -17,6 +17,17 @@ Open [http://localhost:3002](http://localhost:3002)
 
 You can also import `scripts/qa-trackerdb.sql` in phpMyAdmin.
 
+Hostinger / live MySQL environment variables:
+
+```
+MYSQL_HOST=your-hostinger-mysql-host
+MYSQL_PORT=3306
+MYSQL_USER=your-mysql-user
+MYSQL_PASSWORD=your-mysql-password
+MYSQL_DATABASE=your-mysql-database
+AUTH_SECRET=a-long-random-secret
+```
+
 Default password: `Staff@123`
 
 | Role | Email | Access |

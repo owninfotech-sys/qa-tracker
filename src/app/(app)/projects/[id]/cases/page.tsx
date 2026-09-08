@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canAddCases, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findProjectCases } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PriorityBadge } from "@/components/ui/status-badge";
@@ -15,12 +15,7 @@ export default async function CasesPage({
   const { id } = await params;
   const canAdd = canAddCases(user.role);
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      cases: { include: { page: true }, orderBy: { createdAt: "asc" } },
-    },
-  });
+  const project = await findProjectCases(id);
   if (!project) notFound();
 
   return (

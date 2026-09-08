@@ -7,7 +7,13 @@ import {
   isAdmin,
   requireSession,
 } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {
+  findPageTaskDetail,
+  findSiblingTasks,
+  findTaskActivity,
+  findTaskAttachments,
+  findUsers,
+} from "@/lib/data";
 import { parseAssigneeIds, parseLinkedIds, taskKey } from "@/lib/task-key";
 import { WorkQueueHeader } from "@/components/projects/work-queue-header";
 import { IssueDetailView } from "@/components/projects/issue-detail-view";
@@ -23,74 +29,14 @@ export default async function IssueDetailPage({
   const canEdit = canEditContent(user.role);
   const slaEdit = canEditSla(user.role);
 
-  const task = await prisma.pageTask.findUnique({
-    where: { id: taskId },
-    include: {
-      project: { select: { name: true } },
-      page: { select: { name: true } },
-      assignee: { select: { id: true, name: true } },
-      reporter: { select: { name: true } },
-      children: { select: { id: true, title: true, pageId: true } },
-      comments: {
-        include: { user: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  const task = await findPageTaskDetail(taskId);
   if (!task || task.projectId !== id) notFound();
 
   const [people, activity, siblings, files] = await Promise.all([
-    prisma.user.findMany({
-      where: { active: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.activity.findMany({
-      where: { entityType: "page_task", entityId: task.id },
-      include: { user: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 40,
-    }),
-    prisma.pageTask.findMany({
-      where: { projectId: id, id: { not: task.id } },
-      select: { id: true, title: true, pageId: true, linkedTaskIds: true },
-      orderBy: { createdAt: "desc" },
-      take: 80,
-    }),
-    (async () => {
-      try {
-        if (prisma.pageTaskAttachment) {
-          return await prisma.pageTaskAttachment.findMany({
-            where: { taskId: task.id },
-            orderBy: { createdAt: "desc" },
-          });
-        }
-      } catch {
-        /* fall through to raw query */
-      }
-      try {
-        return await prisma.$queryRaw<
-          {
-            id: string;
-            taskId: string;
-            commentId: string | null;
-            userId: string;
-            fileName: string;
-            mimeType: string;
-            size: number;
-            path: string;
-            createdAt: Date;
-          }[]
-        >`
-          SELECT id, taskId, commentId, userId, fileName, mimeType, size, path, createdAt
-          FROM qa_page_task_attachment
-          WHERE taskId = ${task.id}
-          ORDER BY createdAt DESC
-        `;
-      } catch {
-        return [];
-      }
-    })(),
+    findUsers({ active: true, orderBy: "name" }),
+    findTaskActivity(task.id),
+    findSiblingTasks(id, task.id),
+    findTaskAttachments(task.id),
   ]);
 
   const linkedIds = parseLinkedIds(task.linkedTaskIds);

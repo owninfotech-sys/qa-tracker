@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { canExecuteItem, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findRunItemById } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { PriorityBadge, ResultBadge } from "@/components/ui/status-badge";
 import { executeItemAction, startItemAction } from "@/app/actions/execute";
@@ -16,15 +16,7 @@ export default async function ExecutePage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const item = await prisma.runItem.findUnique({
-    where: { id },
-    include: {
-      case: { include: { module: true, page: true, project: true } },
-      run: true,
-      assignee: true,
-      fixTasks: true,
-    },
-  });
+  const item = await findRunItemById(id);
   if (!item) notFound();
 
   const canRun = canExecuteItem(user.role, item.assigneeId, user.id);

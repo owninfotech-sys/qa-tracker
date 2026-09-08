@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppWindow, Globe } from "lucide-react";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findProjectDashboard } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { StatCard } from "@/components/ui/stat-card";
 import { ResultBadge } from "@/components/ui/status-badge";
@@ -24,17 +24,7 @@ export default async function ProjectDashboardPage({
   const { error } = await searchParams;
   const manage = canManage(user.role);
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      pages: { include: { cases: true, tasks: true }, orderBy: { name: "asc" } },
-      cases: { include: { page: true } },
-      runs: {
-        include: { items: { include: { assignee: true, case: { include: { page: true } } } } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  const project = await findProjectDashboard(id);
 
   if (!project) notFound();
 

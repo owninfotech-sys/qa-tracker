@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { canAddCases, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findProjectWithPages } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { createCaseAction } from "@/app/actions/cases";
 
@@ -16,10 +16,7 @@ export default async function NewCasePage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: { pages: { orderBy: { name: "asc" } } },
-  });
+  const project = await findProjectWithPages(id);
   if (!project) notFound();
 
   return (

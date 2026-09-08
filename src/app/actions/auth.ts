@@ -3,7 +3,7 @@
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { clearSession, createSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findUserByEmail } from "@/lib/data";
 import { isRole, type Role } from "@/lib/types";
 
 export async function loginAction(formData: FormData) {
@@ -16,7 +16,7 @@ export async function loginAction(formData: FormData) {
     redirect("/login?error=Enter%20email%20and%20password");
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await findUserByEmail(email);
   if (!user || !user.active) {
     redirect("/login?error=Invalid%20email%20or%20password");
   }

@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["@prisma/client", "prisma"],
+  serverExternalPackages: ["mysql2"],
   experimental: {
     serverActions: {
       bodySizeLimit: "12mb",

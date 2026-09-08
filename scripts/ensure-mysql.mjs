@@ -60,20 +60,28 @@ function waitForReady(ms = 20000) {
   throw new Error("MySQL did not become reachable at 127.0.0.1:3306.");
 }
 
+function upsertEnv(text, key, value) {
+  const line = `${key}=${value}`;
+  if (new RegExp(`^${key}=`, "m").test(text)) {
+    return text.replace(new RegExp(`^${key}=.*$`, "m"), line);
+  }
+  return `${text.trimEnd()}\n${line}\n`;
+}
+
 function ensureEnv() {
   const fallback = existsSync(examplePath)
     ? readFileSync(examplePath, "utf8")
-    : 'DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"\nAUTH_SECRET="change-me"\n';
+    : "MYSQL_HOST=127.0.0.1\nMYSQL_PORT=3306\nMYSQL_USER=root\nMYSQL_PASSWORD=\nMYSQL_DATABASE=qa-trackerdb\nAUTH_SECRET=change-me\n";
   let text = existsSync(envPath) ? readFileSync(envPath, "utf8") : fallback;
-  if (!/^DATABASE_URL=/m.test(text)) {
-    text = `DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"\n${text}`;
+  text = upsertEnv(text, "MYSQL_HOST", "127.0.0.1");
+  text = upsertEnv(text, "MYSQL_PORT", "3306");
+  text = upsertEnv(text, "MYSQL_USER", "root");
+  if (!/^MYSQL_PASSWORD=/m.test(text)) {
+    text = upsertEnv(text, "MYSQL_PASSWORD", "");
   }
-  text = text.replace(
-    /^DATABASE_URL=.*$/m,
-    'DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"',
-  );
+  text = upsertEnv(text, "MYSQL_DATABASE", database);
   if (!/^AUTH_SECRET=/m.test(text)) {
-    text += `\nAUTH_SECRET="change-me"\n`;
+    text = upsertEnv(text, "AUTH_SECRET", "change-me");
   }
   writeFileSync(envPath, text.endsWith("\n") ? text : `${text}\n`);
 }

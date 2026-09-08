@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canExecuteItem, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {
+  countFixTasks,
+  createFixTask,
+  findRunItemById,
+  logActivity,
+  updateFixTask,
+  updateRunItem,
+} from "@/lib/data";
 
 export async function executeItemAction(formData: FormData) {
   const session = await requireSession();
@@ -12,14 +19,7 @@ export async function executeItemAction(formData: FormData) {
   const comment = String(formData.get("comment") || "").trim();
   const severity = String(formData.get("severity") || "major");
 
-  const item = await prisma.runItem.findUnique({
-    where: { id: itemId },
-    include: {
-      case: true,
-      run: true,
-      fixTasks: true,
-    },
-  });
+  const item = await findRunItemById(itemId);
 
   if (!item || item.run.status === "closed") {
     redirect("/");
@@ -34,51 +34,39 @@ export async function executeItemAction(formData: FormData) {
 
   const now = new Date();
 
-  await prisma.runItem.update({
-    where: { id: itemId },
-    data: {
-      result,
-      comment: comment || null,
-      actualResult: comment || null,
-      startedAt: item.startedAt ?? now,
-      finishedAt: ["pass", "fail", "blocked", "skipped"].includes(result)
-        ? now
-        : item.finishedAt,
-    },
+  await updateRunItem(itemId, {
+    result,
+    comment: comment || null,
+    actualResult: comment || null,
+    startedAt: item.startedAt ?? now,
+    finishedAt: ["pass", "fail", "blocked", "skipped"].includes(result) ? now : item.finishedAt,
   });
 
-  await prisma.activity.create({
-    data: {
-      entityType: "run_item",
-      entityId: itemId,
-      userId: session.id,
-      message: `Marked ${item.case.caseKey} as ${result}${comment ? ` — ${comment}` : ""}`,
-    },
-  });
+  await logActivity(
+    "run_item",
+    itemId,
+    session.id,
+    `Marked ${item.case.caseKey} as ${result}${comment ? ` — ${comment}` : ""}`,
+  );
 
   if (result === "fail") {
     const existing = item.fixTasks[0];
     if (existing) {
-      await prisma.fixTask.update({
-        where: { id: existing.id },
-        data: {
-          status: existing.status === "closed" ? "open" : existing.status,
-          steps: comment || existing.steps,
-          severity,
-        },
+      await updateFixTask(existing.id, {
+        status: existing.status === "closed" ? "open" : existing.status,
+        steps: comment || existing.steps,
+        severity,
       });
     } else {
-      const count = await prisma.fixTask.count();
-      await prisma.fixTask.create({
-        data: {
-          fixKey: `FIX-${count + 1}`,
-          title: item.case.title,
-          runItemId: item.id,
-          severity,
-          status: "open",
-          steps: comment,
-          dueDate: item.dueDate,
-        },
+      const count = await countFixTasks();
+      await createFixTask({
+        fixKey: `FIX-${count + 1}`,
+        title: item.case.title,
+        runItemId: item.id,
+        severity,
+        status: "open",
+        steps: comment,
+        dueDate: item.dueDate,
       });
     }
   }
@@ -86,18 +74,8 @@ export async function executeItemAction(formData: FormData) {
   if (result === "pass") {
     const openFix = item.fixTasks.find((fix) => fix.status !== "wont_fix");
     if (openFix) {
-      await prisma.fixTask.update({
-        where: { id: openFix.id },
-        data: { status: "closed" },
-      });
-      await prisma.activity.create({
-        data: {
-          entityType: "fix",
-          entityId: openFix.id,
-          userId: session.id,
-          message: `Retest passed. Closed ${openFix.fixKey}`,
-        },
-      });
+      await updateFixTask(openFix.id, { status: "closed" });
+      await logActivity("fix", openFix.id, session.id, `Retest passed. Closed ${openFix.fixKey}`);
     }
   }
 
@@ -110,31 +88,18 @@ export async function executeItemAction(formData: FormData) {
 export async function startItemAction(formData: FormData) {
   const session = await requireSession();
   const itemId = String(formData.get("itemId") || "");
-  const item = await prisma.runItem.findUnique({
-    where: { id: itemId },
-    include: { run: true },
-  });
+  const item = await findRunItemById(itemId);
 
   if (!item || item.run.status === "closed") return;
   const allowed = canExecuteItem(session.role, item.assigneeId, session.id);
   if (!allowed) return;
 
-  await prisma.runItem.update({
-    where: { id: itemId },
-    data: {
-      result: "in_progress",
-      startedAt: item.startedAt ?? new Date(),
-    },
+  await updateRunItem(itemId, {
+    result: "in_progress",
+    startedAt: item.startedAt ?? new Date(),
   });
 
-  await prisma.activity.create({
-    data: {
-      entityType: "run_item",
-      entityId: itemId,
-      userId: session.id,
-      message: "Started testing",
-    },
-  });
+  await logActivity("run_item", itemId, session.id, "Started testing");
 
   revalidatePath(`/execute/${itemId}`);
   revalidatePath("/");

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createUser, findUserByEmail, updateUser } from "@/lib/data";
 import { isRole } from "@/lib/types";
 
 function requireAdminRedirect() {
@@ -30,18 +30,16 @@ export async function createUserAction(formData: FormData) {
     redirect("/team?error=Role%20must%20be%20Admin%2C%20Tester%2C%20or%20Fixer");
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await findUserByEmail(email);
   if (existing) {
     redirect("/team?error=Email%20already%20exists");
   }
 
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      role,
-      password: await bcrypt.hash(password, 10),
-    },
+  await createUser({
+    name,
+    email,
+    role,
+    password: await bcrypt.hash(password, 10),
   });
 
   revalidatePath("/team");
@@ -56,10 +54,7 @@ export async function updateUserRoleAction(formData: FormData) {
   const role = String(formData.get("role") || "");
   if (!id || !isRole(role) || id === session.id) return;
 
-  await prisma.user.update({
-    where: { id },
-    data: { role },
-  });
+  await updateUser(id, { role });
 
   revalidatePath("/team");
 }
@@ -72,10 +67,7 @@ export async function toggleUserAction(formData: FormData) {
   const active = String(formData.get("active") || "") === "true";
   if (id === session.id) return;
 
-  await prisma.user.update({
-    where: { id },
-    data: { active: !active },
-  });
+  await updateUser(id, { active: !active });
 
   revalidatePath("/team");
 }

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { canManage, canUpdateFix, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findActivityForEntities, findFixById, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { FixBadge, PriorityBadge } from "@/components/ui/status-badge";
 import { assignFixAction, updateFixAction, wontFixAction } from "@/app/actions/fixes";
@@ -18,16 +18,8 @@ export default async function FixDetailPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const fix = await prisma.fixTask.findUnique({
-    where: { id },
-    include: {
-      assignee: true,
-      runItem: {
-        include: { case: { include: { project: true, module: true } }, assignee: true, run: true },
-      },
-    },
-  });
-  if (!fix) notFound();
+  const fix = await findFixById(id);
+  if (!fix || !fix.runItem) notFound();
 
   const canSee =
     canManage(user.role) ||
@@ -35,17 +27,9 @@ export default async function FixDetailPage({
     fix.runItem.assigneeId === user.id;
   if (!canSee) redirect("/");
 
-  const activities = await prisma.activity.findMany({
-    where: { entityId: { in: [fix.id, fix.runItemId] } },
-    include: { user: true },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  const activities = await findActivityForEntities([fix.id, fix.runItemId]);
 
-  const fixers = await prisma.user.findMany({
-    where: { active: true, role: "FIXER" },
-    orderBy: { name: "asc" },
-  });
+  const fixers = await findUsers({ active: true, role: "FIXER", orderBy: "name" });
 
   const manage = canManage(user.role);
   const canUpdate = canUpdateFix(user.role, fix.assigneeId, user.id);

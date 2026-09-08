@@ -4,20 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
-    "build": "prisma generate && next build --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:start": "node scripts/ensure-mysql.mjs",
-    "db:setup": "node scripts/ensure-mysql.mjs && prisma generate && node scripts/apply-mysql.mjs && prisma db seed"
-  },
-  "prisma": {
-    "seed": "npx tsx prisma/seed.ts"
+    "db:setup": "node scripts/ensure-mysql.mjs && node scripts/apply-mysql.mjs && node scripts/seed-mysql.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.16.2",
     "bcryptjs": "^3.0.2",
     "jose": "^6.1.0",
     "lucide-react": "^0.544.0",
+    "mysql2": "^3.24.4",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -30,9 +27,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
-    "prisma": "^6.16.2",
     "tailwindcss": "^4",
-    "tsx": "^4.20.5",
     "typescript": "^5"
   },
   "optionalDependencies": {

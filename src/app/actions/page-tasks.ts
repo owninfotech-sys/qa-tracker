@@ -10,7 +10,16 @@ import {
   isAdmin,
   requireSession,
 } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import {
+  createPageTask,
+  createTaskAttachment,
+  createTaskComment,
+  deletePageTask,
+  findPageTaskById,
+  findUsers,
+  logActivity,
+  updatePageTask,
+} from "@/lib/data";
 import { parseAssigneeIds, parseLinkedIds, serializeAssigneeIds } from "@/lib/task-key";
 import { nextSortOrderAtTop, writeTaskSortOrder } from "@/lib/task-order";
 import { saveTaskUploads } from "@/lib/uploads";
@@ -25,19 +34,8 @@ function refreshTask(projectId: string, pageId: string, taskId?: string) {
   }
 }
 
-async function logActivity(entityId: string, userId: string, message: string) {
-  try {
-    await prisma.activity.create({
-      data: {
-        entityType: "page_task",
-        entityId,
-        userId,
-        message,
-      },
-    });
-  } catch (error) {
-    console.error("Could not write activity", error);
-  }
+async function recordTaskActivity(entityId: string, userId: string, message: string) {
+  await logActivity("page_task", entityId, userId, message);
 }
 
 export async function createPageTaskAction(formData: FormData) {
@@ -69,25 +67,23 @@ export async function createPageTaskAction(formData: FormData) {
 
   const sortOrder = await nextSortOrderAtTop(projectId, status);
 
-  const task = await prisma.pageTask.create({
-    data: {
-      projectId,
-      pageId,
-      kind,
-      title,
-      details: details || null,
-      priority,
-      status,
-      parentId,
-      labels: labels || null,
-      assigneeId,
-      assigneeIds: serializeAssigneeIds(uniqueAssignees) || null,
-      reporterId: session.id,
-    },
+  const task = await createPageTask({
+    projectId,
+    pageId,
+    kind,
+    title,
+    details: details || null,
+    priority,
+    status,
+    parentId,
+    labels: labels || null,
+    assigneeId,
+    assigneeIds: serializeAssigneeIds(uniqueAssignees) || null,
+    reporterId: session.id,
   });
   await writeTaskSortOrder(task.id, sortOrder);
 
-  await logActivity(task.id, session.id, `Created work item`);
+  await recordTaskActivity(task.id, session.id, `Created work item`);
   refreshTask(projectId, pageId, parentId || task.id);
 
   if (parentId) {
@@ -106,28 +102,25 @@ export async function updatePageTaskAction(formData: FormData) {
   const priority = String(formData.get("priority") || "");
   if (!id || !projectId || !pageId) return;
 
-  const current = await prisma.pageTask.findUnique({ where: { id } });
+  const current = await findPageTaskById(id);
   if (!current) return;
   if (status && !canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
   if (priority && !canEditContent(session.role)) return;
 
-  await prisma.pageTask.update({
-    where: { id },
-    data: {
-      ...(isPageTaskStatus(status) ? { status } : {}),
-      ...(priority && canEditContent(session.role) ? { priority } : {}),
-    },
+  await updatePageTask(id, {
+    ...(isPageTaskStatus(status) ? { status } : {}),
+    ...(priority && canEditContent(session.role) ? { priority } : {}),
   });
 
   if (status && current && status !== current.status) {
-    await logActivity(
+    await recordTaskActivity(
       id,
       session.id,
       `Changed status from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(status)}`,
     );
   }
   if (priority && current && priority !== current.priority) {
-    await logActivity(id, session.id, `Changed priority to ${priority}`);
+    await recordTaskActivity(id, session.id, `Changed priority to ${priority}`);
   }
 
   refreshTask(projectId, pageId, id);
@@ -146,7 +139,7 @@ export async function reorderPageTasksAction(formData: FormData) {
     .filter(Boolean);
   if (!id || !projectId || !pageId || !orderedIds.includes(id)) return;
 
-  const current = await prisma.pageTask.findUnique({ where: { id } });
+  const current = await findPageTaskById(id);
   if (!current || current.projectId !== projectId) return;
   if (!canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
 
@@ -157,7 +150,7 @@ export async function reorderPageTasksAction(formData: FormData) {
   }
 
   if (nextStatus !== current.status) {
-    await logActivity(
+    await recordTaskActivity(
       id,
       session.id,
       `Changed status from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(nextStatus)}`,
@@ -182,11 +175,8 @@ export async function updatePageTaskSlaAction(formData: FormData) {
   const resolutionAt = new Date(resolutionRaw);
   if (Number.isNaN(firstResponseAt.getTime()) || Number.isNaN(resolutionAt.getTime())) return;
 
-  await prisma.pageTask.update({
-    where: { id },
-    data: { firstResponseAt, resolutionAt },
-  });
-  await logActivity(id, session.id, "Updated SLA times");
+  await updatePageTask(id, { firstResponseAt, resolutionAt });
+  await recordTaskActivity(id, session.id, "Updated SLA times");
   refreshTask(projectId, pageId, id);
 }
 
@@ -203,17 +193,14 @@ export async function updatePageTaskFieldsAction(formData: FormData) {
   const labels = String(formData.get("labels") || "").trim();
   if (!id || !projectId || !pageId) return;
 
-  await prisma.pageTask.update({
-    where: { id },
-    data: {
-      ...(title ? { title } : {}),
-      details: details || null,
-      ...(isPageTaskKind(kind) ? { kind } : {}),
-      labels: labels || null,
-    },
+  await updatePageTask(id, {
+    ...(title ? { title } : {}),
+    details: details || null,
+    ...(isPageTaskKind(kind) ? { kind } : {}),
+    labels: labels || null,
   });
 
-  await logActivity(id, session.id, "Updated work item details");
+  await recordTaskActivity(id, session.id, "Updated work item details");
   refreshTask(projectId, pageId, id);
 }
 
@@ -235,23 +222,14 @@ export async function assignPageTaskAction(formData: FormData) {
   if (raw === "me" && !listed.includes(session.id)) listed.push(session.id);
   const nextIds = [...new Set(listed)];
   const assigneeId = nextIds[0] ?? null;
-  const people = nextIds.length
-    ? await prisma.user.findMany({ where: { id: { in: nextIds } } })
-    : [];
+  const people = nextIds.length ? await findUsers({ ids: nextIds }) : [];
   const names = people.map((person) => person.name).join(", ");
 
-  await prisma.pageTask.update({
-    where: { id },
-    data: {
-      assigneeId,
-      assigneeIds: serializeAssigneeIds(nextIds) || null,
-    },
+  await updatePageTask(id, {
+    assigneeId,
+    assigneeIds: serializeAssigneeIds(nextIds) || null,
   });
-  await logActivity(
-    id,
-    session.id,
-    names ? `Assigned to ${names}` : "Cleared assignee",
-  );
+  await recordTaskActivity(id, session.id, names ? `Assigned to ${names}` : "Cleared assignee");
   refreshTask(projectId, pageId, id);
 }
 
@@ -276,7 +254,7 @@ export async function addPageTaskCommentAction(formData: FormData) {
   if (!taskId || !projectId || !pageId || (!body && files.length === 0)) return;
   if (session.role === "FIXER" && !body) return;
 
-  const current = await prisma.pageTask.findUnique({ where: { id: taskId } });
+  const current = await findPageTaskById(taskId);
   if (!current || !canWorkAssignedTask(session.role, parseAssigneeIds(current.assigneeIds, current.assigneeId), session.id)) return;
 
   let saved: Awaited<ReturnType<typeof saveTaskUploads>> = [];
@@ -286,56 +264,35 @@ export async function addPageTaskCommentAction(formData: FormData) {
     console.error("Could not store uploaded files", error);
   }
 
-  const note =
+  const commentBody =
     body ||
     (saved.length === 1 ? `Attached ${saved[0].fileName}` : saved.length ? `Attached ${saved.length} files` : "");
-  if (!note) return;
+  if (!commentBody) return;
 
-  const comment = await prisma.pageTaskComment.create({
-    data: {
-      taskId,
-      userId: session.id,
-      body: note,
-      visibility,
-    },
+  const comment = await createTaskComment({
+    taskId,
+    userId: session.id,
+    body: commentBody,
+    visibility,
   });
 
   for (const file of saved) {
-    const id = `att${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     try {
-      const store = prisma.pageTaskAttachment;
-      if (store) {
-        await store.create({
-          data: {
-            id,
-            taskId,
-            commentId: comment.id,
-            userId: session.id,
-            fileName: file.fileName,
-            mimeType: file.mimeType,
-            size: file.size,
-            path: file.path,
-          },
-        });
-        continue;
-      }
-    } catch (error) {
-      console.error("Prisma attachment create failed", error);
-    }
-
-    try {
-      await prisma.$executeRaw`
-        INSERT INTO qa_page_task_attachment
-          (id, taskId, commentId, userId, fileName, mimeType, size, path, createdAt)
-        VALUES
-          (${id}, ${taskId}, ${comment.id}, ${session.id}, ${file.fileName}, ${file.mimeType}, ${file.size}, ${file.path}, NOW(3))
-      `;
+      await createTaskAttachment({
+        taskId,
+        commentId: comment.id,
+        userId: session.id,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        size: file.size,
+        path: file.path,
+      });
     } catch (error) {
       console.error("Could not save attachment record", error);
     }
   }
 
-  await logActivity(
+  await recordTaskActivity(
     taskId,
     session.id,
     saved.length && !body
@@ -357,15 +314,12 @@ export async function linkPageTaskAction(formData: FormData) {
   const linkedId = String(formData.get("linkedId") || "");
   if (!id || !linkedId || linkedId === id) return;
 
-  const task = await prisma.pageTask.findUnique({ where: { id } });
+  const task = await findPageTaskById(id);
   if (!task) return;
 
   const next = Array.from(new Set([...parseLinkedIds(task.linkedTaskIds), linkedId]));
-  await prisma.pageTask.update({
-    where: { id },
-    data: { linkedTaskIds: next.join(",") },
-  });
-  await logActivity(id, session.id, "Linked a work item");
+  await updatePageTask(id, { linkedTaskIds: next.join(",") });
+  await recordTaskActivity(id, session.id, "Linked a work item");
   refreshTask(projectId, pageId, id);
 }
 
@@ -384,7 +338,7 @@ export async function reactPageTaskAction(formData: FormData) {
     like: "Liked this work item",
     unlike: "Removed like",
   };
-  await logActivity(id, session.id, messages[react] ?? `Updated ${react}`);
+  await recordTaskActivity(id, session.id, messages[react] ?? `Updated ${react}`);
   refreshTask(projectId, pageId, id);
 }
 
@@ -397,7 +351,7 @@ export async function deletePageTaskAction(formData: FormData) {
   const pageId = String(formData.get("pageId") || "");
   if (!id || !projectId || !pageId) return;
 
-  await prisma.pageTask.delete({ where: { id } });
+  await deletePageTask(id);
   refreshTask(projectId, pageId);
   redirect(`/projects/${projectId}/pages/${pageId}`);
 }

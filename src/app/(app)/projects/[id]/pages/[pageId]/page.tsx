@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { canAddCases, canEditContent, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findPageTasksForBoard, findProjectWorkQueue, findUsers } from "@/lib/data";
 import { parseAssigneeIds, taskKey } from "@/lib/task-key";
 import { loadSortOrders } from "@/lib/task-order";
 import { PageTaskList } from "@/components/projects/page-task-list";
@@ -20,31 +20,13 @@ export default async function PageTaskDashboard({
   const canCreate = canAddCases(user.role);
   const canEdit = canEditContent(user.role);
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      owner: { select: { name: true } },
-      pages: {
-        orderBy: { name: "asc" },
-        include: { tasks: true },
-      },
-    },
-  });
+  const project = await findProjectWorkQueue(id);
   if (!project) notFound();
 
   const page = project.pages.find((item) => item.id === pageId);
   if (!page) notFound();
 
-  const allTasks = await prisma.pageTask.findMany({
-    where: { projectId: project.id },
-    include: {
-      page: { select: { name: true } },
-      assignee: { select: { id: true, name: true } },
-      reporter: { select: { name: true } },
-      _count: { select: { comments: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const allTasks = await findPageTasksForBoard(project.id);
   const sortOrders = await loadSortOrders(project.id);
   allTasks.sort(
     (a, b) =>
@@ -52,12 +34,7 @@ export default async function PageTaskDashboard({
   );
 
   const fixerIds = new Set(
-    (
-      await prisma.user.findMany({
-        where: { role: "FIXER", active: true },
-        select: { id: true },
-      })
-    ).map((item) => item.id),
+    (await findUsers({ role: "FIXER", active: true })).map((item) => item.id),
   );
 
   const isFixerTask = (task: (typeof allTasks)[number]) => {
@@ -83,11 +60,10 @@ export default async function PageTaskDashboard({
     return task.pageId === page.id;
   });
 
-  const people = await prisma.user.findMany({
-    where: { active: true },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
+  const people = (await findUsers({ active: true, orderBy: "name" })).map((person) => ({
+    id: person.id,
+    name: person.name,
+  }));
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
 
   const toListTask = (task: (typeof allTasks)[number]) => {

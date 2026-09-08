@@ -1,47 +1,24 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { mysqlBin, mysqlEnv, rootDir } from "./mysql-env.mjs";
 
-const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = join(rootDir, ".env");
 const sqlPath = join(rootDir, "scripts", "qa-trackerdb.sql");
-
-try {
-  for (const line of readFileSync(envPath, "utf8").split("\n")) {
-    const match = line.match(/^([A-Z_]+)=(.*)$/);
-    if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].replace(/^"(.*)"$/, "$1");
-    }
-  }
-} catch {
-  /* .env is optional when DATABASE_URL is already set */
-}
-
-const url = process.env.DATABASE_URL || "mysql://root@127.0.0.1:3306/qa-trackerdb";
-const parsed = new URL(url);
-const database = decodeURIComponent(parsed.pathname.replace(/^\//, "")) || "qa-trackerdb";
-const user = decodeURIComponent(parsed.username || "root");
-const password = decodeURIComponent(parsed.password || "");
-const host = parsed.hostname || "127.0.0.1";
-const port = parsed.port || "3306";
-
-const mysqlBin = [
-  process.env.MYSQL_BIN,
-  "/Applications/XAMPP/bin/mysql",
-  "/Applications/XAMPP/xamppfiles/bin/mysql",
-].find((bin) => bin && existsSync(bin)) || "mysql";
-
-const args = ["--protocol=TCP", "-h", host, "-P", port, "-u", user];
-if (password) args.push(`-p${password}`);
+const config = mysqlEnv();
+const bin = mysqlBin();
+const args = ["--protocol=TCP", "-h", config.host, "-P", String(config.port), "-u", config.user];
+if (config.password) args.push(`-p${config.password}`);
 
 function mysql(extra, options = {}) {
-  return execFileSync(mysqlBin, [...args, ...extra], { encoding: "utf8", ...options });
+  return execFileSync(bin, [...args, ...extra], { encoding: "utf8", ...options });
 }
 
-mysql(["-e", `CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`]);
+mysql([
+  "-e",
+  `CREATE DATABASE IF NOT EXISTS \`${config.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+]);
 
-const applied = spawnSync(mysqlBin, [...args, database], {
+const applied = spawnSync(bin, [...args, config.database], {
   input: readFileSync(sqlPath),
   encoding: "utf8",
 });
@@ -64,13 +41,13 @@ for (const [table, column, definition] of extraColumns) {
   const exists = mysql([
     "-N",
     "-e",
-    `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${database}' AND table_name='${table}' AND column_name='${column}'`,
+    `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='${config.database}' AND table_name='${table}' AND column_name='${column}'`,
   ]).trim();
   if (exists === "0") {
-    mysql(["-e", `ALTER TABLE \`${database}\`.\`${table}\` ADD COLUMN \`${column}\` ${definition}`], {
+    mysql(["-e", `ALTER TABLE \`${config.database}\`.\`${table}\` ADD COLUMN \`${column}\` ${definition}`], {
       stdio: "inherit",
     });
   }
 }
 
-console.log(`MySQL schema is ready on ${database}`);
+console.log(`MySQL schema is ready on ${config.database}`);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findTestRunDetail, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { StatCard } from "@/components/ui/stat-card";
 import { PriorityBadge, ResultBadge } from "@/components/ui/status-badge";
@@ -17,22 +17,10 @@ export default async function RunPage({
   const { id } = await params;
   const manage = canManage(user.role);
 
-  const run = await prisma.testRun.findUnique({
-    where: { id },
-    include: {
-      project: true,
-      items: {
-        include: { assignee: true, case: { include: { page: true } } },
-        orderBy: { id: "asc" },
-      },
-    },
-  });
+  const run = await findTestRunDetail(id);
   if (!run) notFound();
 
-  const testers = await prisma.user.findMany({
-    where: { active: true, role: "TESTER" },
-    orderBy: { name: "asc" },
-  });
+  const testers = await findUsers({ active: true, role: "TESTER", orderBy: "name" });
 
   const counts = {
     total: run.items.length,

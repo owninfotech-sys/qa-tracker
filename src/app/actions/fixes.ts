@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canManage, canUpdateFix, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findFixById, findUserById, logActivity, updateFixTask, updateRunItem } from "@/lib/data";
 
 export async function assignFixAction(formData: FormData) {
   const session = await requireSession();
@@ -13,20 +13,10 @@ export async function assignFixAction(formData: FormData) {
   const assigneeId = String(formData.get("assigneeId") || "");
   if (!fixId || !assigneeId) return;
 
-  await prisma.fixTask.update({
-    where: { id: fixId },
-    data: { assigneeId },
-  });
+  await updateFixTask(fixId, { assigneeId });
 
-  const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });
-  await prisma.activity.create({
-    data: {
-      entityType: "fix",
-      entityId: fixId,
-      userId: session.id,
-      message: `Assigned to ${assignee?.name ?? "fixer"}`,
-    },
-  });
+  const assignee = await findUserById(assigneeId);
+  await logActivity("fix", fixId, session.id, `Assigned to ${assignee?.name ?? "fixer"}`);
 
   revalidatePath("/fixes");
   revalidatePath(`/fixes/${fixId}`);
@@ -39,10 +29,7 @@ export async function updateFixAction(formData: FormData) {
   const status = String(formData.get("status") || "");
   const notes = String(formData.get("fixerNotes") || "").trim();
 
-  const fix = await prisma.fixTask.findUnique({
-    where: { id: fixId },
-    include: { runItem: true },
-  });
+  const fix = await findFixById(fixId);
   if (!fix) redirect("/");
 
   const allowed = canUpdateFix(session.role, fix.assigneeId, session.id);
@@ -54,37 +41,22 @@ export async function updateFixAction(formData: FormData) {
 
   const nextStatus = status === "fixed" ? "retest" : status;
 
-  await prisma.fixTask.update({
-    where: { id: fixId },
-    data: {
-      status: nextStatus,
-      fixerNotes: notes || fix.fixerNotes,
-      assigneeId: fix.assigneeId ?? (session.role === "FIXER" ? session.id : fix.assigneeId),
-    },
+  await updateFixTask(fixId, {
+    status: nextStatus,
+    fixerNotes: notes || fix.fixerNotes,
+    assigneeId: fix.assigneeId ?? (session.role === "FIXER" ? session.id : fix.assigneeId),
   });
 
   if (status === "fixed") {
-    await prisma.runItem.update({
-      where: { id: fix.runItemId },
-      data: { result: "fail" },
-    });
+    await updateRunItem(fix.runItemId, { result: "fail" });
   }
 
-  if (status === "in_progress" && fix.status === "open") {
-    // started
-  }
-
-  await prisma.activity.create({
-    data: {
-      entityType: "fix",
-      entityId: fixId,
-      userId: session.id,
-      message:
-        status === "fixed"
-          ? `Marked fixed — ready for retest. ${notes}`
-          : `Moved to ${nextStatus}`,
-    },
-  });
+  await logActivity(
+    "fix",
+    fixId,
+    session.id,
+    status === "fixed" ? `Marked fixed — ready for retest. ${notes}` : `Moved to ${nextStatus}`,
+  );
 
   revalidatePath(`/fixes/${fixId}`);
   revalidatePath("/fixes");
@@ -102,19 +74,9 @@ export async function wontFixAction(formData: FormData) {
     redirect(`/fixes/${fixId}?error=Reason%20required`);
   }
 
-  await prisma.fixTask.update({
-    where: { id: fixId },
-    data: { status: "wont_fix", fixerNotes: reason },
-  });
+  await updateFixTask(fixId, { status: "wont_fix", fixerNotes: reason });
 
-  await prisma.activity.create({
-    data: {
-      entityType: "fix",
-      entityId: fixId,
-      userId: session.id,
-      message: `Won't fix — ${reason}`,
-    },
-  });
+  await logActivity("fix", fixId, session.id, `Won't fix — ${reason}`);
 
   revalidatePath(`/fixes/${fixId}`);
   revalidatePath("/fixes");

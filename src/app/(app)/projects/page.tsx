@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { canManage, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findActiveProjectsList } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { percent } from "@/lib/format";
@@ -12,15 +12,7 @@ export default async function ProjectsPage() {
   const user = await requireSession();
   const manage = canManage(user.role);
 
-  const projects = await prisma.project.findMany({
-    where: { status: "active" },
-    include: {
-      pages: true,
-      cases: true,
-      runs: { include: { items: true }, orderBy: { createdAt: "desc" } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const projects = await findActiveProjectsList();
 
   return (
     <>
