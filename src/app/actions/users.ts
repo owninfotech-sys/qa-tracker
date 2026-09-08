@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireSession } from "@/lib/auth";
 import { createUser, findUserByEmail, updateUser } from "@/lib/data";
-import { isRole } from "@/lib/types";
+import { parseStaffRole } from "@/lib/types";
 
 function requireAdminRedirect() {
   return redirect("/");
@@ -19,15 +19,15 @@ export async function createUserAction(formData: FormData) {
   const email = String(formData.get("email") || "")
     .trim()
     .toLowerCase();
-  const role = String(formData.get("role") || "TESTER");
+  const role = parseStaffRole(String(formData.get("role") || "TESTER"), String(formData.get("customRole") || ""));
   const password = String(formData.get("password") || "");
 
   if (!name || !email || !password) {
     redirect("/team?error=Name%2C%20email%20and%20password%20are%20required");
   }
 
-  if (!isRole(role)) {
-    redirect("/team?error=Role%20must%20be%20Admin%2C%20Tester%2C%20or%20Fixer");
+  if (!role) {
+    redirect("/team?error=Choose%20a%20role%20or%20type%20a%20custom%20role%20name");
   }
 
   const existing = await findUserByEmail(email);
@@ -51,8 +51,8 @@ export async function updateUserRoleAction(formData: FormData) {
   if (!isAdmin(session.role)) return;
 
   const id = String(formData.get("id") || "");
-  const role = String(formData.get("role") || "");
-  if (!id || !isRole(role) || id === session.id) return;
+  const role = parseStaffRole(String(formData.get("role") || ""), String(formData.get("customRole") || ""));
+  if (!id || !role || id === session.id) return;
 
   await updateUser(id, { role });
 

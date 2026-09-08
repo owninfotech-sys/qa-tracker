@@ -83,6 +83,22 @@ function ensureEnv() {
   if (!/^AUTH_SECRET=/m.test(text)) {
     text = upsertEnv(text, "AUTH_SECRET", "change-me");
   }
+  const defaults = {
+    ADMIN_NAME: "Amit",
+    ADMIN_EMAIL: "amit.owninfotech@gmail.com",
+    ADMIN_PASSWORD: "Staff@123",
+    TESTER_NAME: "Tester",
+    TESTER_EMAIL: "tester.owninfotech@gmail.com",
+    TESTER_PASSWORD: "Staff@123",
+    FIXER_NAME: "Fixer",
+    FIXER_EMAIL: "fixer.owninfotech@gmail.com",
+    FIXER_PASSWORD: "Staff@123",
+  };
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!new RegExp(`^${key}=`, "m").test(text)) {
+      text = upsertEnv(text, key, value);
+    }
+  }
   writeFileSync(envPath, text.endsWith("\n") ? text : `${text}\n`);
 }
 

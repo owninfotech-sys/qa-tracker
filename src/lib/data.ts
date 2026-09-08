@@ -85,7 +85,10 @@ export async function createUser(data: {
   return { id };
 }
 
-export async function updateUser(id: string, data: { role?: string; active?: boolean; name?: string }) {
+export async function updateUser(
+  id: string,
+  data: { role?: string; active?: boolean; name?: string; password?: string },
+) {
   const fields: string[] = [];
   const params: unknown[] = [];
   if (data.role != null) {
@@ -99,6 +102,10 @@ export async function updateUser(id: string, data: { role?: string; active?: boo
   if (data.name != null) {
     fields.push("name = ?");
     params.push(data.name);
+  }
+  if (data.password != null) {
+    fields.push("password = ?");
+    params.push(data.password);
   }
   if (!fields.length) return;
   params.push(id);

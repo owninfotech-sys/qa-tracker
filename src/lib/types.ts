@@ -1,9 +1,27 @@
 export const ROLES = ["ADMIN", "TESTER", "FIXER"] as const;
 
-export type Role = (typeof ROLES)[number];
+export type Role = (typeof ROLES)[number] | string;
+
+export function isSystemRole(value: string): value is (typeof ROLES)[number] {
+  return (ROLES as readonly string[]).includes(value);
+}
 
 export function isRole(value: string): value is Role {
-  return (ROLES as readonly string[]).includes(value);
+  return isSystemRole(value) || isCustomRole(value);
+}
+
+export function isCustomRole(value: string) {
+  const name = value.trim();
+  if (name.length < 2 || name.length > 40) return false;
+  if (isSystemRole(name.toUpperCase()) || name.toUpperCase() === "OTHER") return false;
+  return /^[\p{L}\d][\p{L}\d ./-]*$/u.test(name);
+}
+
+export function parseStaffRole(roleValue: string, customValue = "") {
+  const selected = roleValue.trim();
+  if (isSystemRole(selected)) return selected;
+  const custom = (selected === "OTHER" ? customValue : selected).trim();
+  return isCustomRole(custom) ? custom : null;
 }
 
 export type SessionUser = {

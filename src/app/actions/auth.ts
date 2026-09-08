@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { clearSession, createSession } from "@/lib/auth";
 import { findUserByEmail } from "@/lib/data";
-import { isRole, type Role } from "@/lib/types";
+import { isRole } from "@/lib/types";
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "")
@@ -34,7 +34,7 @@ export async function loginAction(formData: FormData) {
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role as Role,
+    role: user.role,
   });
 
   redirect("/");

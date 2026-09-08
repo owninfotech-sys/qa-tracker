@@ -1,4 +1,4 @@
-import { fixLabel, pageTaskKindLabel, pageTaskStatusLabel, resultLabel } from "@/lib/format";
+import { fixLabel, pageTaskKindLabel, pageTaskStatusLabel, resultLabel, roleLabel } from "@/lib/format";
 
 const resultClass: Record<string, string> = {
   pending: "bg-[#f1f3f4] text-muted",
@@ -94,7 +94,7 @@ export function PageTaskStatusBadge({ status }: { status: string }) {
 export function RoleBadge({ role }: { role: string }) {
   return (
     <span className="inline-flex items-center rounded-full bg-blue-soft px-2.5 py-0.5 text-xs font-medium text-blue-ink">
-      {role === "ADMIN" ? "Admin" : role === "TESTER" ? "Tester" : "Fixer"}
+      {roleLabel(role)}
     </span>
   );
 }

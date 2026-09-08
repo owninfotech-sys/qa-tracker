@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { findUserByEmail, findUserById } from "@/lib/data";
-import { isRole, type Role, type SessionUser } from "@/lib/types";
+import { isCustomRole, isRole, isSystemRole, type Role, type SessionUser } from "@/lib/types";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET || "owninfotech-qa-tracker-dev-secret",
@@ -91,15 +91,15 @@ export function canAddCases(role: Role) {
 }
 
 export function canEditContent(role: Role) {
-  return role === "ADMIN" || role === "TESTER";
+  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
 }
 
 export function canEditSla(role: Role) {
-  return role === "ADMIN" || role === "TESTER";
+  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
 }
 
 export function canWorkAssignedTask(role: Role, assigneeId: string | string[] | null, userId: string) {
-  if (role === "ADMIN" || role === "TESTER") return true;
+  if (role === "ADMIN" || role === "TESTER" || isCustomRole(role)) return true;
   const ids = Array.isArray(assigneeId) ? assigneeId : assigneeId ? [assigneeId] : [];
   return role === "FIXER" && ids.includes(userId);
 }
@@ -113,7 +113,11 @@ export function canChangeTaskStatus(role: Role, assigneeId: string | string[] | 
 }
 
 export function canExecuteItem(role: Role, assigneeId: string | null, userId: string) {
-  return role === "ADMIN" || (role === "TESTER" && assigneeId === userId);
+  return role === "ADMIN" || ((role === "TESTER" || isCustomRole(role)) && assigneeId === userId);
+}
+
+export function isStaffEditor(role: Role) {
+  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
 }
 
 export function canUpdateFix(role: Role, assigneeId: string | null, userId: string) {

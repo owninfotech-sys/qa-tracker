@@ -1,9 +1,3 @@
-CREATE DATABASE IF NOT EXISTS `qa-trackerdb`
-  CHARACTER SET utf8mb4
-  COLLATE utf8mb4_unicode_ci;
-
-USE `qa-trackerdb`;
-
 CREATE TABLE IF NOT EXISTS `qa_user` (
   `id` varchar(191) NOT NULL,
   `name` varchar(191) NOT NULL,

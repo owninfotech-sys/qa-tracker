@@ -5,6 +5,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { RoleBadge } from "@/components/ui/status-badge";
 import { initials } from "@/lib/format";
 import { createUserAction, toggleUserAction, updateUserRoleAction } from "@/app/actions/users";
+import { RoleFields } from "@/components/team/role-fields";
 
 export default async function TeamPage({
   searchParams,
@@ -24,7 +25,7 @@ export default async function TeamPage({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Team</h1>
           <p className="mt-1 text-sm text-muted">
-            Add testers, fixers, and admins here. Deactivate instead of deleting so history stays intact.
+            Add testers, fixers, admins, or a custom role. Deactivate instead of deleting so history stays intact.
           </p>
         </div>
 
@@ -32,11 +33,7 @@ export default async function TeamPage({
           {error ? <p className="text-sm text-danger md:col-span-5">{decodeURIComponent(error)}</p> : null}
           <input name="name" required placeholder="Full name" className="rounded-lg border border-line px-3 py-2.5 text-sm" />
           <input name="email" type="email" required placeholder="email@owninfotech.com" className="rounded-lg border border-line px-3 py-2.5 text-sm" />
-          <select name="role" className="rounded-lg border border-line px-3 py-2.5 text-sm">
-            <option value="TESTER">Tester</option>
-            <option value="FIXER">Fixer</option>
-            <option value="ADMIN">Admin</option>
-          </select>
+          <RoleFields />
           <input name="password" type="password" required placeholder="Password" className="rounded-lg border border-line px-3 py-2.5 text-sm" />
           <button className="rounded-lg bg-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-hover">
             Add person
@@ -82,17 +79,9 @@ export default async function TeamPage({
                       {person.id === user.id ? (
                         <RoleBadge role={person.role} />
                       ) : (
-                        <form action={updateUserRoleAction} className="flex items-center gap-2">
+                        <form action={updateUserRoleAction} className="flex flex-wrap items-center gap-2">
                           <input type="hidden" name="id" value={person.id} />
-                          <select
-                            name="role"
-                            defaultValue={person.role}
-                            className="rounded-lg border border-line px-2 py-1.5 text-sm"
-                          >
-                            <option value="ADMIN">Admin</option>
-                            <option value="TESTER">Tester</option>
-                            <option value="FIXER">Fixer</option>
-                          </select>
+                          <RoleFields defaultRole={person.role} compact />
                           <button className="text-sm font-medium text-blue hover:underline">Save</button>
                         </form>
                       )}

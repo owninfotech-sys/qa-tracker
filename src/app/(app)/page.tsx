@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { canManage, requireSession } from "@/lib/auth";
+import { canManage, isStaffEditor, requireSession } from "@/lib/auth";
 import { findMyWork } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,7 +57,7 @@ export default async function MyWorkPage() {
           </div>
         ) : null}
 
-        {(user.role === "TESTER" || admin) && (
+        {(isStaffEditor(user.role)) && (
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-medium">Test points</h2>
@@ -113,7 +113,7 @@ export default async function MyWorkPage() {
           </section>
         )}
 
-        {(user.role === "TESTER" || admin) && retests.length > 0 && (
+        {isStaffEditor(user.role) && retests.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-base font-medium">Ready for retest</h2>
             <div className="overflow-hidden rounded-xl border border-line bg-card">

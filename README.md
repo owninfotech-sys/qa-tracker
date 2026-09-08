@@ -26,13 +26,19 @@ MYSQL_USER=your-mysql-user
 MYSQL_PASSWORD=your-mysql-password
 MYSQL_DATABASE=your-mysql-database
 AUTH_SECRET=a-long-random-secret
+ADMIN_EMAIL=amit.owninfotech@gmail.com
+ADMIN_PASSWORD=Staff@123
+TESTER_EMAIL=tester.owninfotech@gmail.com
+TESTER_PASSWORD=Staff@123
+FIXER_EMAIL=fixer.owninfotech@gmail.com
+FIXER_PASSWORD=Staff@123
 ```
 
-Default password: `Staff@123`
+Default logins come from `.env`. Admin can also add more people from Team, each with their own password.
 
-| Role | Email | Access |
+| Role | Email | Password |
 |---|---|---|
-| Admin | amit.owninfotech@gmail.com | Full control, including adding fixer / tester / admin accounts |
-| Tester | tester.owninfotech@gmail.com | Comment, change status, view work items |
-| Fixer | fixer.owninfotech@gmail.com | Rearrange, change status, comment on assigned work |
+| Admin | amit.owninfotech@gmail.com | Staff@123 |
+| Tester | tester.owninfotech@gmail.com | Staff@123 |
+| Fixer | fixer.owninfotech@gmail.com | Staff@123 |
 
