@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const CLIENT_KEY = "qaPrisma_pageTasks_v10";
+const CLIENT_KEY = "qaPrisma_mysqlDirect_v1";
 
 const globalForPrisma = globalThis as unknown as Record<string, PrismaClient | undefined>;
 

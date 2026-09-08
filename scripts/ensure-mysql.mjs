@@ -1,7 +1,8 @@
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, existsSync, unlinkSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const basedir = "/Applications/XAMPP/xamppfiles";
 const mysqlBin = existsSync("/Applications/XAMPP/bin/mysql")
@@ -11,6 +12,10 @@ const mysqldSafe = `${basedir}/bin/mysqld_safe`;
 const datadir = `${basedir}/var/mysql`;
 const socket = `${datadir}/mysql.sock`;
 const pidFile = `${datadir}/${hostname()}.pid`;
+const database = "qa-trackerdb";
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+const envPath = join(rootDir, ".env");
+const examplePath = join(rootDir, ".env.example");
 
 function mysqlArgs(extra = []) {
   return ["--protocol=TCP", "-h", "127.0.0.1", "-P", "3306", "-uroot", ...extra];
@@ -55,49 +60,52 @@ function waitForReady(ms = 20000) {
   throw new Error("MySQL did not become reachable at 127.0.0.1:3306.");
 }
 
-function query(sql) {
-  return execFileSync(mysqlBin, mysqlArgs(["-N", "-e", sql]), {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+function ensureEnv() {
+  const fallback = existsSync(examplePath)
+    ? readFileSync(examplePath, "utf8")
+    : 'DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"\nAUTH_SECRET="change-me"\n';
+  let text = existsSync(envPath) ? readFileSync(envPath, "utf8") : fallback;
+  if (!/^DATABASE_URL=/m.test(text)) {
+    text = `DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"\n${text}`;
+  }
+  text = text.replace(
+    /^DATABASE_URL=.*$/m,
+    'DATABASE_URL="mysql://root@127.0.0.1:3306/qa-trackerdb"',
+  );
+  if (!/^AUTH_SECRET=/m.test(text)) {
+    text += `\nAUTH_SECRET="change-me"\n`;
+  }
+  writeFileSync(envPath, text.endsWith("\n") ? text : `${text}\n`);
+}
+
+if (!existsSync(mysqlBin)) {
+  throw new Error("MySQL client not found. Start MySQL from XAMPP or set MYSQL_BIN.");
 }
 
 if (!ping()) {
   console.log("MySQL is not running on 127.0.0.1:3306. Starting XAMPP MariaDB...");
   startServer();
   waitForReady();
-  console.log("MySQL is listening on 127.0.0.1:3306.");
-} else {
-  console.log("MySQL is already running on 127.0.0.1:3306.");
 }
 
-const preferred = "qa-trackerdb";
-const fallback = "qatracker";
-let database = fallback;
+console.log("MySQL is running on 127.0.0.1:3306.");
+
+execFileSync(
+  mysqlBin,
+  mysqlArgs([
+    "-e",
+    `CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+  ]),
+  { stdio: "inherit" },
+);
+
+ensureEnv();
 
 try {
-  query(`USE \`${preferred}\`; SHOW TABLES;`);
-  database = preferred;
-  console.log(`Using existing database ${preferred}.`);
-} catch {
-  execFileSync(
-    mysqlBin,
-    mysqlArgs([
-      "-e",
-      `CREATE DATABASE IF NOT EXISTS \`${fallback}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
-    ]),
-    { stdio: "inherit" },
-  );
-  console.log(`${preferred} is not readable from this MySQL process. Using ${fallback}.`);
-}
-
-console.log(`DATABASE=${database}`);
-
-try {
-  const dbDir = join(datadir, database === "qa-trackerdb" ? "qa@002dtrackerdb" : database);
-  if (existsSync(dbDir)) {
-    chmodSync(dbDir, 0o770);
-  }
+  const dbDir = join(datadir, "qa@002dtrackerdb");
+  if (existsSync(dbDir)) chmodSync(dbDir, 0o770);
 } catch {
   /* directory may already be owned by mysql */
 }
+
+console.log(`DATABASE=${database}`);
