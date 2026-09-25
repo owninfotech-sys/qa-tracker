@@ -2,30 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import {
-  canAddCases,
-  canChangeTaskStatus,
-  canCommentOnTask,
-  canEditContent,
-  canEditSla,
-  isAdmin,
-  requireSession,
-} from "@/lib/auth";
+import { hasAccess, requireSession } from "@/lib/auth";
 import {
   createPageTask,
   createTaskAttachment,
   createTaskComment,
   deletePageTask,
   findPageTaskById,
+  findProjectBoardLogs,
+  findOpenDayReport,
   findUsers,
   logActivity,
+  requestDayReport,
+  submitWorkReport,
   updatePageTask,
 } from "@/lib/data";
 import { parseAssigneeIds, parseLinkedIds, serializeAssigneeIds } from "@/lib/task-key";
 import { nextSortOrderAtTop, writeTaskSortOrder } from "@/lib/task-order";
 import { saveTaskUploads } from "@/lib/uploads";
 import { isPageTaskKind, isPageTaskStatus } from "@/lib/types";
-import { pageTaskStatusLabel } from "@/lib/format";
+import { formatActivityTime, pageTaskStatusLabel } from "@/lib/format";
 
 function refreshTask(projectId: string, pageId: string, taskId?: string) {
   revalidatePath(`/projects/${projectId}/pages/${pageId}`);
@@ -41,7 +37,7 @@ async function recordTaskActivity(entityId: string, userId: string, message: str
 
 export async function createPageTaskAction(formData: FormData) {
   const session = await requireSession();
-  if (!canAddCases(session.role)) redirect("/");
+  if (!(await hasAccess(session.role, "createTask"))) redirect("/");
 
   const projectId = String(formData.get("projectId") || "");
   const pageId = String(formData.get("pageId") || "");
@@ -105,19 +101,19 @@ export async function updatePageTaskAction(formData: FormData) {
 
   const current = await findPageTaskById(id);
   if (!current) return;
-  if (status && !canChangeTaskStatus(session.role)) return;
-  if (priority && !canEditContent(session.role)) return;
+  if (status && !(await hasAccess(session.role, "manageTask"))) return;
+  if (priority && !(await hasAccess(session.role, "manageTask"))) return;
 
   await updatePageTask(id, {
     ...(isPageTaskStatus(status) ? { status } : {}),
-    ...(priority && canEditContent(session.role) ? { priority } : {}),
+    ...(priority && (await hasAccess(session.role, "manageTask")) ? { priority } : {}),
   });
 
   if (status && current && status !== current.status) {
     await recordTaskActivity(
       id,
       session.id,
-      `Changed status from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(status)}`,
+      `Changed ${current.taskKey || current.title} from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(status)} at ${formatActivityTime()}`,
     );
   }
   if (priority && current && priority !== current.priority) {
@@ -142,9 +138,11 @@ export async function reorderPageTasksAction(formData: FormData) {
 
   const current = await findPageTaskById(id);
   if (!current || current.projectId !== projectId) return;
-  if (!canChangeTaskStatus(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const nextStatus = isPageTaskStatus(status) ? status : current.status;
+  const key = current.taskKey || current.title;
+  const time = formatActivityTime();
 
   for (const [index, taskId] of orderedIds.entries()) {
     await writeTaskSortOrder(taskId, index, taskId === id ? nextStatus : undefined);
@@ -154,16 +152,19 @@ export async function reorderPageTasksAction(formData: FormData) {
     await recordTaskActivity(
       id,
       session.id,
-      `Changed status from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(nextStatus)}`,
+      `Dragged ${key} from ${pageTaskStatusLabel(current.status)} to ${pageTaskStatusLabel(nextStatus)} at ${time}`,
     );
+  } else {
+    await recordTaskActivity(id, session.id, `Reordered ${key} in ${pageTaskStatusLabel(nextStatus)} at ${time}`);
   }
 
   refreshTask(projectId, pageId, id);
+  return { from: current.status, to: nextStatus, taskKey: key };
 }
 
 export async function updatePageTaskSlaAction(formData: FormData) {
   const session = await requireSession();
-  if (!canEditSla(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const id = String(formData.get("id") || "");
   const projectId = String(formData.get("projectId") || "");
@@ -183,7 +184,7 @@ export async function updatePageTaskSlaAction(formData: FormData) {
 
 export async function updatePageTaskFieldsAction(formData: FormData) {
   const session = await requireSession();
-  if (!canEditContent(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const id = String(formData.get("id") || "");
   const projectId = String(formData.get("projectId") || "");
@@ -207,7 +208,7 @@ export async function updatePageTaskFieldsAction(formData: FormData) {
 
 export async function assignPageTaskAction(formData: FormData) {
   const session = await requireSession();
-  if (!canEditContent(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const id = String(formData.get("id") || "");
   const projectId = String(formData.get("projectId") || "");
@@ -256,7 +257,17 @@ export async function addPageTaskCommentAction(formData: FormData) {
   if (session.role === "FIXER" && !body) return;
 
   const current = await findPageTaskById(taskId);
-  if (!current || !canCommentOnTask(session.role)) return;
+  if (
+    !current ||
+    !(
+      (await hasAccess(session.role, "createTask")) ||
+      (await hasAccess(session.role, "manageTask")) ||
+      (await hasAccess(session.role, "updateFix")) ||
+      (await hasAccess(session.role, "testing"))
+    )
+  ) {
+    return;
+  }
 
   let saved: Awaited<ReturnType<typeof saveTaskUploads>> = [];
   try {
@@ -307,7 +318,7 @@ export async function addPageTaskCommentAction(formData: FormData) {
 
 export async function linkPageTaskAction(formData: FormData) {
   const session = await requireSession();
-  if (!canEditContent(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const id = String(formData.get("id") || "");
   const projectId = String(formData.get("projectId") || "");
@@ -324,28 +335,9 @@ export async function linkPageTaskAction(formData: FormData) {
   refreshTask(projectId, pageId, id);
 }
 
-export async function reactPageTaskAction(formData: FormData) {
-  const session = await requireSession();
-  const id = String(formData.get("id") || "");
-  const projectId = String(formData.get("projectId") || "");
-  const pageId = String(formData.get("pageId") || "");
-  const react = String(formData.get("react") || "");
-  if (!id || !react) return;
-
-  const messages: Record<string, string> = {
-    watch: "Started watching this work item",
-    unwatch: "Stopped watching this work item",
-    vote: "Voted for this work item",
-    like: "Liked this work item",
-    unlike: "Removed like",
-  };
-  await recordTaskActivity(id, session.id, messages[react] ?? `Updated ${react}`);
-  refreshTask(projectId, pageId, id);
-}
-
 export async function deletePageTaskAction(formData: FormData) {
   const session = await requireSession();
-  if (!isAdmin(session.role)) return;
+  if (!(await hasAccess(session.role, "manageTask"))) return;
 
   const id = String(formData.get("id") || "");
   const projectId = String(formData.get("projectId") || "");
@@ -355,4 +347,50 @@ export async function deletePageTaskAction(formData: FormData) {
   await deletePageTask(id);
   refreshTask(projectId, pageId);
   redirect(`/projects/${projectId}/pages/${pageId}`);
+}
+
+export async function loadProjectLogsAction(projectId: string) {
+  const session = await requireSession();
+  if (!(await hasAccess(session.role, "viewAll")) || !projectId) return [];
+  return findProjectBoardLogs(projectId);
+}
+
+export async function loadOpenDayReportAction(projectId: string) {
+  await requireSession();
+  if (!projectId) return null;
+  return findOpenDayReport(projectId);
+}
+
+export async function requestDayReportAction(projectId: string) {
+  const session = await requireSession();
+  if (!projectId) return null;
+  const report = await requestDayReport(projectId, session.id);
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/today`);
+  revalidatePath("/projects");
+  return report;
+}
+
+export async function submitWorkReportAction(formData: FormData) {
+  const session = await requireSession();
+  const projectId = String(formData.get("projectId") || "");
+  const taskId = String(formData.get("taskId") || "") || null;
+  const reportId = String(formData.get("reportId") || "") || undefined;
+  const kind = String(formData.get("kind") || "task_done") === "day_complete" ? "day_complete" : "task_done";
+  const body = String(formData.get("body") || "").trim();
+  const pageId = String(formData.get("pageId") || "");
+  if (!projectId || !body) return { ok: false, error: "Write the report before saving." };
+  await submitWorkReport({
+    id: reportId,
+    projectId,
+    taskId,
+    userId: session.id,
+    kind,
+    body,
+  });
+  if (pageId) refreshTask(projectId, pageId, taskId ?? undefined);
+  else revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/today`);
+  revalidatePath("/projects");
+  return { ok: true };
 }

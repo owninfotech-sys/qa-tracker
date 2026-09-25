@@ -1,7 +1,6 @@
 export const BOARD_COLUMNS = [
   { id: "todo", title: "TO DO", statuses: ["open", "pending"] },
-  { id: "progress", title: "IN PROGRESS", statuses: ["in_progress", "waiting_customer", "escalated"] },
-  { id: "ready", title: "FIXED READY FOR TESTING", statuses: ["ready_for_testing"] },
+  { id: "progress", title: "IN PROGRESS", statuses: ["in_progress", "waiting_customer", "escalated", "ready_for_testing"] },
   { id: "done", title: "DONE", statuses: ["done", "wont_do"] },
 ] as const;
 

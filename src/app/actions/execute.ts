@@ -25,7 +25,7 @@ export async function executeItemAction(formData: FormData) {
     redirect("/");
   }
 
-  const allowed = canExecuteItem(session.role, item.assigneeId, session.id);
+  const allowed = await canExecuteItem(session.role, item.assigneeId, session.id);
   if (!allowed) redirect("/");
 
   if ((result === "fail" || result === "skipped" || result === "blocked") && !comment) {
@@ -91,7 +91,7 @@ export async function startItemAction(formData: FormData) {
   const item = await findRunItemById(itemId);
 
   if (!item || item.run.status === "closed") return;
-  const allowed = canExecuteItem(session.role, item.assigneeId, session.id);
+  const allowed = await canExecuteItem(session.role, item.assigneeId, session.id);
   if (!allowed) return;
 
   await updateRunItem(itemId, {

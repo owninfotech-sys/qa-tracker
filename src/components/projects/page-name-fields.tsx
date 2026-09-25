@@ -36,13 +36,13 @@ function PageNameFieldsInner({ name, hint }: { name: string; hint: string }) {
           {pages.map((page) => (
             <span
               key={page}
-              className="inline-flex items-center gap-1 rounded-full bg-blue-soft px-3 py-1 text-sm font-medium text-blue-ink"
+              className="inline-flex items-center gap-1.5 rounded-[3px] bg-blue-soft px-2.5 py-1 text-[13px] font-medium text-blue-ink"
             >
               {page}
               <button
                 type="button"
                 onClick={() => setPages(pages.filter((item) => item !== page))}
-                className="rounded-full p-0.5 hover:bg-white/70 hover:text-danger"
+                className="rounded-[3px] p-0.5 text-blue-ink/70 hover:bg-white hover:text-danger"
                 aria-label={`Remove ${page}`}
               >
                 <X size={12} />
@@ -62,13 +62,13 @@ function PageNameFieldsInner({ name, hint }: { name: string; hint: string }) {
               addPage();
             }
           }}
-          className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3.5 py-2.5 text-sm transition focus:bg-white"
+          className="w-full rounded-[3px] border border-line bg-card px-3.5 py-2.5 text-sm text-ink placeholder:text-[#94A3B8] transition"
           placeholder="Home, Login, Checkout…"
         />
         <button
           type="button"
           onClick={addPage}
-          className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-blue text-white shadow-sm hover:bg-blue-hover"
+          className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[3px] bg-blue text-white shadow-[0_1px_2px_#091e4240] hover:bg-blue-hover"
           aria-label="Add page"
         >
           <Plus size={18} />

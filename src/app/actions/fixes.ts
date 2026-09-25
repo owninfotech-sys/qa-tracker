@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { canManage, canUpdateFix, requireSession } from "@/lib/auth";
+import { canUpdateFix, hasAccess, requireSession } from "@/lib/auth";
 import { findFixById, findUserById, logActivity, updateFixTask, updateRunItem } from "@/lib/data";
 
 export async function assignFixAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await hasAccess(session.role, "viewAll"))) return;
 
   const fixId = String(formData.get("fixId") || "");
   const assigneeId = String(formData.get("assigneeId") || "");
@@ -32,7 +32,7 @@ export async function updateFixAction(formData: FormData) {
   const fix = await findFixById(fixId);
   if (!fix) redirect("/");
 
-  const allowed = canUpdateFix(session.role, fix.assigneeId, session.id);
+  const allowed = await canUpdateFix(session.role, fix.assigneeId, session.id);
   if (!allowed) redirect("/");
 
   if (status === "fixed" && !notes) {
@@ -66,7 +66,7 @@ export async function updateFixAction(formData: FormData) {
 
 export async function wontFixAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await hasAccess(session.role, "viewAll"))) return;
 
   const fixId = String(formData.get("fixId") || "");
   const reason = String(formData.get("reason") || "").trim();

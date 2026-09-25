@@ -20,12 +20,15 @@ import { PageTaskBoard } from "@/components/projects/page-task-board";
 import { StatusTransitionMenu } from "@/components/projects/status-transition-menu";
 import { JiraFilter, MoreFiltersMenu, STATUS_FILTER_PILL } from "@/components/projects/jira-filter";
 import { formatListDate, initials, pageTaskKindLabel, pageTaskStatusLabel, priorityLabel } from "@/lib/format";
-import { PAGE_TASK_KINDS, PAGE_TASK_STATUSES } from "@/lib/types";
+import { TASK_STATUSES } from "@/lib/types";
 import type { ListTask } from "@/lib/work-item";
+import { kindsForFilter, statusesForFilter } from "@/lib/work-type";
+import { toast } from "@/components/ui/toast";
 
 export type { ListTask };
 
 const kindIcon: Record<string, typeof Square> = {
+  task: List,
   issue: Square,
   refine: BookOpen,
   redesign: Box,
@@ -34,19 +37,21 @@ const kindIcon: Record<string, typeof Square> = {
 };
 
 const kindTone: Record<string, string> = {
+  task: "bg-[#2563EB] text-white",
   issue: "bg-[#1d7f4e] text-white",
-  refine: "bg-[#0c66e4] text-white",
-  redesign: "bg-[#6e5dc6] text-white",
-  fix_bug: "bg-[#c9372c] text-white",
-  fix_ui: "bg-[#e56910] text-white",
+  refine: "bg-[#2563EB] text-white",
+  redesign: "bg-[#7C3AED] text-white",
+  fix_bug: "bg-[#DC2626] text-white",
+  fix_ui: "bg-[#D97706] text-white",
 };
 
 const kindPill: Record<string, string> = {
-  issue: "bg-[#e3fcef] text-[#006644]",
-  refine: "bg-[#deebff] text-[#0747a6]",
-  redesign: "bg-[#f3e8fd] text-[#5e4db2]",
-  fix_bug: "bg-[#ffeceb] text-[#ae2e24]",
-  fix_ui: "bg-[#fff0b3] text-[#7f5f01]",
+  task: "bg-[#EFF6FF] text-[#1D4ED8]",
+  issue: "bg-[#DCFCE7] text-[#16A34A]",
+  refine: "bg-[#EFF6FF] text-[#1D4ED8]",
+  redesign: "bg-[#F5F3FF] text-[#7C3AED]",
+  fix_bug: "bg-[#FEF2F2] text-[#DC2626]",
+  fix_ui: "bg-[#FEF3C7] text-[#D97706]",
 };
 
 function resolutionDate(createdAt: string) {
@@ -77,6 +82,10 @@ export function PageTaskList({
   view,
   basePath,
   queue,
+  workType,
+  projectId,
+  pageId,
+  canViewAll = false,
 }: {
   tasks: ListTask[];
   boardTasks: ListTask[];
@@ -86,6 +95,10 @@ export function PageTaskList({
   view: "list" | "board";
   basePath: string;
   queue?: string;
+  workType?: string;
+  projectId?: string;
+  pageId?: string;
+  canViewAll?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -110,6 +123,14 @@ export function PageTaskList({
   );
   const reporterNames = useMemo(
     () => Array.from(new Set(source.map((task) => task.reporterName))).sort(),
+    [source],
+  );
+  const typeKinds = useMemo(
+    () => kindsForFilter(workType, source.map((task) => task.kind)),
+    [workType, source],
+  );
+  const typeStatuses = useMemo(
+    () => statusesForFilter(source.map((task) => task.status)),
     [source],
   );
 
@@ -143,26 +164,26 @@ export function PageTaskList({
 
   const tabClass = (active: boolean) =>
     `inline-flex items-center gap-1.5 border-b-2 px-2 py-2.5 text-sm ${
-      active ? "border-[#0c66e4] font-semibold text-[#0c66e4]" : "border-transparent text-[#44546f] hover:bg-[#f1f2f4]"
+      active ? "border-[#2563EB] font-semibold text-[#2563EB]" : "border-transparent text-[#64748B] hover:bg-[#F1F5F9]"
     }`;
 
   const filters = (
     <div className="flex flex-wrap items-center gap-2 px-4 py-3">
       <label className="relative w-[220px]">
-        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#626f86]" />
+        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search work"
-          className="w-full rounded-full border border-[#dcdfe4] bg-white py-1.5 pl-9 pr-3 text-sm text-[#172b4d] shadow-none"
+          className="w-full rounded-full border border-[#E2E8F0] bg-white py-1.5 pl-9 pr-3 text-sm text-[#172033] shadow-none"
         />
       </label>
       <JiraFilter
-        label="Request type"
+        label="Type"
         searchPlaceholder="Search Request type"
         selected={kinds}
         onChange={setKinds}
-        options={PAGE_TASK_KINDS.map((value) => ({
+        options={typeKinds.map((value) => ({
           value,
           label: pageTaskKindLabel(value),
           pillClass: kindPill[value],
@@ -173,7 +194,7 @@ export function PageTaskList({
         searchPlaceholder="Search Status"
         selected={statuses}
         onChange={setStatuses}
-        options={PAGE_TASK_STATUSES.map((value) => ({
+        options={typeStatuses.map((value) => ({
           value,
           label: pageTaskStatusLabel(value),
           pillClass: STATUS_FILTER_PILL[value],
@@ -190,7 +211,7 @@ export function PageTaskList({
             value: name,
             label: name,
             leading: (
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[9px] font-semibold text-[#44546f]">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[9px] font-semibold text-[#64748B]">
                 {initials(name)}
               </span>
             ),
@@ -228,7 +249,7 @@ export function PageTaskList({
             value: name,
             label: name,
             leading: (
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[9px] font-semibold text-[#44546f]">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[9px] font-semibold text-[#64748B]">
                 {initials(name)}
               </span>
             ),
@@ -243,11 +264,11 @@ export function PageTaskList({
         ]}
         onAdd={(id) => setExtra((current) => ({ ...current, [id]: true }))}
       />
-      <div className="ml-auto flex items-center gap-1 text-[#44546f]">
-        <button type="button" className="rounded-md p-1.5 hover:bg-[#f1f2f4]" aria-label="Export">
+      <div className="ml-auto flex items-center gap-1 text-[#64748B]">
+        <button type="button" className="rounded-md p-1.5 hover:bg-[#F1F5F9]" aria-label="Export">
           <Download size={16} />
         </button>
-        <button type="button" className="rounded-md p-1.5 hover:bg-[#f1f2f4]" aria-label="More">
+        <button type="button" className="rounded-md p-1.5 hover:bg-[#F1F5F9]" aria-label="More">
           <MoreHorizontal size={16} />
         </button>
       </div>
@@ -255,8 +276,8 @@ export function PageTaskList({
   );
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[3px] border border-[#dcdfe4] bg-white">
-      <div className="flex items-center gap-1 border-b border-[#dcdfe4] px-3">
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[3px] border border-[#E2E8F0] bg-white">
+      <div className="flex items-center gap-1 border-b border-[#E2E8F0] px-3">
         <Link href={viewHref(basePath, queue, "list")} className={tabClass(view === "list")}>
           <List size={16} />
           List
@@ -274,16 +295,20 @@ export function PageTaskList({
           currentUserId={currentUserId}
           role={role}
           toolbar={filters}
+          workType={workType}
+          projectId={projectId || rows[0]?.projectId || boardTasks[0]?.projectId || tasks[0]?.projectId}
+          pageId={pageId || rows[0]?.pageId || boardTasks[0]?.pageId || tasks[0]?.pageId}
+          canViewAll={canViewAll}
         />
       ) : null}
 
       {view === "list" ? (
         <>
           {filters}
-          <p className="px-4 pb-2 text-xs text-[#626f86]">{rows.length} work items</p>
+          <p className="px-4 pb-2 text-xs text-[#64748B]">{rows.length} work items</p>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1080px] text-left text-sm">
-              <thead className="border-y border-[#dcdfe4] bg-white text-[12px] font-semibold text-[#626f86]">
+              <thead className="border-y border-[#E2E8F0] bg-white text-[12px] font-semibold text-[#64748B]">
                 <tr>
                   <th className="w-10 px-4 py-2">
                     <input
@@ -306,7 +331,7 @@ export function PageTaskList({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-16 text-center text-sm text-[#626f86]">
+                    <td colSpan={10} className="px-4 py-16 text-center text-sm text-[#64748B]">
                       No work items match these filters.
                     </td>
                   </tr>
@@ -318,9 +343,9 @@ export function PageTaskList({
                       <tr
                         key={task.id}
                         onClick={() => router.push(task.href)}
-                        className={`cursor-pointer border-b border-[#f1f2f4] ${
-                          checked ? "bg-[#e9f2ff]" : index % 2 === 1 ? "bg-[#f7f8f9]" : "bg-white"
-                        } hover:bg-[#f1f2f4]`}
+                        className={`cursor-pointer border-b border-[#F1F5F9] ${
+                          checked ? "bg-[#EFF6FF]" : index % 2 === 1 ? "bg-[#F8FAFC]" : "bg-white"
+                        } hover:bg-[#F1F5F9]`}
                       >
                         <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                           <input
@@ -335,29 +360,38 @@ export function PageTaskList({
                             }
                           />
                         </td>
-                        <td className="px-2 py-3 text-[12px] font-bold tabular-nums text-[#626f86]">{index + 1}</td>
+                        <td className="px-2 py-3 text-[12px] font-bold tabular-nums text-[#64748B]">{index + 1}</td>
                         <td className="px-2 py-3">
                           <span
-                            className={`inline-flex h-5 w-5 items-center justify-center rounded-[3px] ${kindTone[task.kind] ?? "bg-[#44546f] text-white"}`}
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded-[3px] ${kindTone[task.kind] ?? "bg-[#64748B] text-white"}`}
                             title={pageTaskKindLabel(task.kind)}
                           >
                             <Icon size={12} />
                           </span>
                         </td>
-                        <td className="px-2 py-3 font-medium text-[#0c66e4]">{task.taskKey}</td>
-                        <td className="px-2 py-3">
-                          <p className="font-medium text-[#0c66e4] hover:underline">{task.title}</p>
+                        <td
+                          className="px-2 py-3 font-medium text-[#2563EB]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void navigator.clipboard.writeText(task.taskKey).then(() => toast(`${task.taskKey} copied`));
+                          }}
+                          title="Copy task ID"
+                        >
+                          {task.taskKey}
                         </td>
                         <td className="px-2 py-3">
-                          <span className="inline-flex items-center gap-1.5 text-[#172b4d]">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[10px] font-semibold text-[#44546f]">
+                          <p className="font-medium text-[#2563EB] hover:underline">{task.title}</p>
+                        </td>
+                        <td className="px-2 py-3">
+                          <span className="inline-flex items-center gap-1.5 text-[#172033]">
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-semibold text-[#64748B]">
                               {task.reporterName.slice(0, 1).toUpperCase()}
                             </span>
                             {task.reporterName}
                           </span>
                         </td>
                         <td className="px-2 py-3">
-                          <span className="inline-flex items-center gap-1.5 text-[#172b4d]">
+                          <span className="inline-flex items-center gap-1.5 text-[#172033]">
                             {task.assigneeNames.length ? (
                               <>
                                 <span className="inline-flex -space-x-1">
@@ -365,7 +399,7 @@ export function PageTaskList({
                                     <span
                                       key={name}
                                       title={name}
-                                      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[10px] font-semibold text-[#44546f] ring-2 ring-white"
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-semibold text-[#64748B] ring-2 ring-white"
                                     >
                                       {name.slice(0, 1).toUpperCase()}
                                     </span>
@@ -375,7 +409,7 @@ export function PageTaskList({
                               </>
                             ) : (
                               <>
-                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[#44546f]">
+                                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[#64748B]">
                                   <UserRound size={12} />
                                 </span>
                                 Unassigned
@@ -394,10 +428,10 @@ export function PageTaskList({
                             canEdit={canEdit}
                           />
                         </td>
-                        <td className="whitespace-nowrap px-2 py-3 text-[#172b4d]">{formatListDate(task.createdAt)}</td>
+                        <td className="whitespace-nowrap px-2 py-3 text-[#172033]">{formatListDate(task.createdAt)}</td>
                         <td className="whitespace-nowrap px-2 py-3">
-                          <span className="inline-flex items-center gap-1.5 text-[#172b4d]">
-                            <Clock3 size={14} className="text-[#626f86]" />
+                          <span className="inline-flex items-center gap-1.5 text-[#172033]">
+                            <Clock3 size={14} className="text-[#64748B]" />
                             {resolutionDate(task.createdAt)}
                             <span className="inline-flex h-3.5 w-3.5 items-end gap-px">
                               <span className="h-2 w-[3px] rounded-sm bg-[#22a06b]" />

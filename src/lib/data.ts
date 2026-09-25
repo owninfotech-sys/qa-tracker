@@ -1,5 +1,10 @@
 import { asBool, asDate, createId, execute, query, queryOne, withTransaction } from "@/lib/db";
+import { formatActivityTime } from "@/lib/format";
 import type { Role } from "@/lib/types";
+import { isOpenWorkStatus, parseWorkType, ISSUE_KINDS } from "@/lib/work-type";
+import { parseAssigneeIds, formatTaskKey, projectCodeFromName } from "@/lib/task-key";
+import { isTodayTask, taskDueAt, todayReason, testingTodayReason, type TodayReason } from "@/lib/today";
+import { buildWorkDashboard, parseRangeDays, type DashboardRange, type DashboardTask } from "@/lib/dashboard";
 
 type Row = Record<string, unknown>;
 
@@ -14,6 +19,7 @@ export type UserRecord = {
   password: string;
   role: Role;
   active: boolean;
+  logo: string | null;
   createdAt: Date;
 };
 
@@ -25,6 +31,7 @@ function mapUser(row: Row): UserRecord {
     password: String(row.password),
     role: String(row.role) as Role,
     active: asBool(row.active),
+    logo: row.logo ? String(row.logo) : null,
     createdAt: asDate(row.createdAt as Date | string) ?? new Date(),
   };
 }
@@ -60,13 +67,14 @@ export async function findUsers(options?: {
     params.push(...options.ids);
   }
   const order = options?.orderBy === "createdAt" ? "createdAt ASC" : "name ASC";
-  const sql = `SELECT id, name, email, role, active, createdAt FROM qa_user${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order}`;
+  const sql = `SELECT id, name, email, role, active, logo, createdAt FROM qa_user${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order}`;
   return (await query<Row>(sql, params)).map((row) => ({
     id: String(row.id),
     name: String(row.name),
     email: String(row.email),
     role: String(row.role) as Role,
     active: asBool(row.active),
+    logo: row.logo ? String(row.logo) : null,
     createdAt: asDate(row.createdAt as Date | string) ?? new Date(),
   }));
 }
@@ -87,7 +95,7 @@ export async function createUser(data: {
 
 export async function updateUser(
   id: string,
-  data: { role?: string; active?: boolean; name?: string; password?: string },
+  data: { role?: string; active?: boolean; name?: string; password?: string; logo?: string | null },
 ) {
   const fields: string[] = [];
   const params: unknown[] = [];
@@ -106,6 +114,10 @@ export async function updateUser(
   if (data.password != null) {
     fields.push("password = ?");
     params.push(data.password);
+  }
+  if (data.logo !== undefined) {
+    fields.push("logo = ?");
+    params.push(data.logo);
   }
   if (!fields.length) return;
   params.push(id);
@@ -145,6 +157,7 @@ export async function findTeamPeople() {
     role: String(row.role) as Role,
     active: asBool(row.active),
     createdAt: asDate(row.createdAt as Date | string) ?? new Date(),
+    logo: row.logo ? String(row.logo) : null,
     assignedItems: Array.from({ length: Number(row.openTests) || 0 }),
     assignedFixes: Array.from({ length: Number(row.openFixes) || 0 }),
   }));
@@ -153,9 +166,12 @@ export async function findTeamPeople() {
 export type ProjectRecord = {
   id: string;
   name: string;
+  code: string;
   type: string;
   url: string | null;
   rsvpUrl: string | null;
+  figmaUrl: string | null;
+  deadline: Date | null;
   status: string;
   ownerId: string;
   createdAt: Date;
@@ -165,9 +181,12 @@ function mapProject(row: Row): ProjectRecord {
   return {
     id: String(row.id),
     name: String(row.name),
+    code: String(row.code || "").toUpperCase() || "PRJ",
     type: String(row.type),
     url: row.url == null ? null : String(row.url),
     rsvpUrl: row.rsvpUrl == null ? null : String(row.rsvpUrl),
+    figmaUrl: row.figmaUrl == null ? null : String(row.figmaUrl),
+    deadline: asDate(row.deadline as Date | string | null),
     status: String(row.status),
     ownerId: String(row.ownerId),
     createdAt: asDate(row.createdAt as Date | string) ?? new Date(),
@@ -180,22 +199,74 @@ export async function findProjectById(id: string) {
 }
 
 export async function findPages(projectId: string) {
+  await ensurePageSortColumn();
   return query<{ id: string; name: string; projectId: string }>(
-    "SELECT id, name, projectId FROM qa_page WHERE projectId = ? ORDER BY name ASC",
+    "SELECT id, name, projectId FROM qa_page WHERE projectId = ? ORDER BY sortOrder ASC, name ASC",
     [projectId],
   );
 }
 
 export async function findFirstPage(projectId: string) {
+  await ensurePageSortColumn();
   return queryOne<{ id: string }>(
-    "SELECT id FROM qa_page WHERE projectId = ? ORDER BY name ASC LIMIT 1",
+    "SELECT id FROM qa_page WHERE projectId = ? ORDER BY sortOrder ASC, name ASC LIMIT 1",
     [projectId],
   );
 }
 
+async function nextProjectCode(name: string) {
+  const base = projectCodeFromName(name);
+  const existing = await query<{ code: string }>("SELECT code FROM qa_project WHERE code IS NOT NULL");
+  const used = new Set(existing.map((row) => String(row.code || "").toUpperCase()).filter(Boolean));
+  let code = base;
+  let n = 2;
+  while (used.has(code)) {
+    code = `${base}${n}`.slice(0, 8);
+    n += 1;
+  }
+  return code;
+}
+
+let pageSortReady = false;
+
+async function ensurePageSortColumn() {
+  if (pageSortReady) return;
+  try {
+    await execute("ALTER TABLE qa_page ADD COLUMN sortOrder INT NOT NULL DEFAULT 0");
+  } catch {
+    /* column already exists */
+  }
+  pageSortReady = true;
+}
+
+export async function writePageSortOrders(projectId: string, orderedIds: string[]) {
+  await ensurePageSortColumn();
+  const pages = await findPages(projectId);
+  const allowed = new Set(pages.map((page) => page.id));
+  const unique = orderedIds.filter((id, index) => allowed.has(id) && orderedIds.indexOf(id) === index);
+  for (const [index, id] of unique.entries()) {
+    await execute("UPDATE qa_page SET sortOrder = ? WHERE id = ? AND projectId = ?", [index, id, projectId]);
+  }
+}
+
+async function nextPageSortOrder(projectId: string) {
+  await ensurePageSortColumn();
+  const row = await queryOne<{ maxOrder: number | null }>(
+    "SELECT MAX(sortOrder) AS maxOrder FROM qa_page WHERE projectId = ?",
+    [projectId],
+  );
+  return (Number(row?.maxOrder) || 0) + (row?.maxOrder == null ? 0 : 1);
+}
+
 export async function createPage(projectId: string, name: string) {
   const id = createId();
-  await execute("INSERT INTO qa_page (id, projectId, name) VALUES (?, ?, ?)", [id, projectId, name]);
+  const sortOrder = await nextPageSortOrder(projectId);
+  await execute("INSERT INTO qa_page (id, projectId, name, sortOrder) VALUES (?, ?, ?, ?)", [
+    id,
+    projectId,
+    name,
+    sortOrder,
+  ]);
   return { id, projectId, name };
 }
 
@@ -227,14 +298,18 @@ export async function createProject(data: {
   type: string;
   url: string | null;
   rsvpUrl: string | null;
+  figmaUrl: string | null;
+  deadline: Date | null;
   ownerId: string;
   pages: string[];
 }) {
   const id = createId();
+  const type = parseWorkType(data.type);
+  const code = await nextProjectCode(data.name);
   await withTransaction(async (conn) => {
     await conn.execute(
-      "INSERT INTO qa_project (id, name, type, url, rsvpUrl, status, ownerId, createdAt) VALUES (?, ?, ?, ?, ?, 'active', ?, NOW(3))",
-      [id, data.name, data.type, data.url, data.rsvpUrl, data.ownerId],
+      "INSERT INTO qa_project (id, name, code, type, url, rsvpUrl, figmaUrl, deadline, status, ownerId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, NOW(3))",
+      [id, data.name, code, type, data.url, data.rsvpUrl, data.figmaUrl, data.deadline, data.ownerId],
     );
     const moduleId = createId();
     await conn.execute("INSERT INTO qa_module (id, projectId, name) VALUES (?, ?, 'General')", [moduleId, id]);
@@ -247,13 +322,24 @@ export async function createProject(data: {
 
 export async function updateProject(
   id: string,
-  data: { status?: string; url?: string | null; rsvpUrl?: string | null },
+  data: {
+    status?: string;
+    name?: string;
+    url?: string | null;
+    rsvpUrl?: string | null;
+    figmaUrl?: string | null;
+    deadline?: Date | null;
+  },
 ) {
   const fields: string[] = [];
   const params: unknown[] = [];
   if (data.status != null) {
     fields.push("status = ?");
     params.push(data.status);
+  }
+  if (data.name != null) {
+    fields.push("name = ?");
+    params.push(data.name);
   }
   if (data.url !== undefined) {
     fields.push("url = ?");
@@ -262,6 +348,14 @@ export async function updateProject(
   if (data.rsvpUrl !== undefined) {
     fields.push("rsvpUrl = ?");
     params.push(data.rsvpUrl);
+  }
+  if (data.figmaUrl !== undefined) {
+    fields.push("figmaUrl = ?");
+    params.push(data.figmaUrl);
+  }
+  if (data.deadline !== undefined) {
+    fields.push("deadline = ?");
+    params.push(data.deadline);
   }
   if (!fields.length) return;
   params.push(id);
@@ -308,27 +402,55 @@ export async function findActiveProjectsList() {
   const items = runIds.length
     ? await query<Row>(`SELECT * FROM qa_run_item WHERE runId IN (${placeholders(runIds.length)})`, runIds)
     : [];
-  return projects.map((project) => ({
-    ...project,
-    pages: pages.filter((page) => page.projectId === project.id),
-    cases: cases.filter((item) => item.projectId === project.id),
-    runs: runs
-      .filter((run) => String(run.projectId) === project.id)
-      .map((run) => ({
-        id: String(run.id),
-        name: String(run.name),
-        status: String(run.status),
-        items: items
-          .filter((item) => String(item.runId) === String(run.id))
-          .map((item) => ({ id: String(item.id), result: String(item.result) })),
-      })),
-  }));
+  const workItems = await query<{
+    projectId: string;
+    status: string;
+    assigneeId: string | null;
+    assigneeIds: string | null;
+    createdAt: Date | string;
+    updatedAt: Date | string | null;
+    resolutionAt: Date | string | null;
+  }>(
+    `SELECT projectId, status, assigneeId, assigneeIds, createdAt, updatedAt, resolutionAt
+     FROM qa_page_task WHERE projectId IN (${placeholders(ids.length)})`,
+    ids,
+  );
+  return projects.map((project) => {
+    const projectWork = workItems.filter((item) => item.projectId === project.id);
+    const openWork = projectWork.filter((item) => isOpenWorkStatus(item.status));
+    const assignedWork = openWork.filter(
+      (item) => parseAssigneeIds(item.assigneeIds, item.assigneeId).length > 0,
+    );
+    return {
+      ...project,
+      pages: pages.filter((page) => page.projectId === project.id),
+      cases: cases.filter((item) => item.projectId === project.id),
+      work: {
+        total: projectWork.length,
+        open: openWork.length,
+        assigned: assignedWork.length,
+        done: projectWork.length - openWork.length,
+        today: projectWork.filter((item) => isTodayTask(item) && isOpenWorkStatus(item.status)).length,
+      },
+      runs: runs
+        .filter((run) => String(run.projectId) === project.id)
+        .map((run) => ({
+          id: String(run.id),
+          name: String(run.name),
+          status: String(run.status),
+          items: items
+            .filter((item) => String(item.runId) === String(run.id))
+            .map((item) => ({ id: String(item.id), result: String(item.result) })),
+        })),
+    };
+  });
 }
 
 export async function findProjectDashboard(id: string) {
   const project = await findProjectById(id);
   if (!project) return null;
-  const pages = await query<Row>("SELECT * FROM qa_page WHERE projectId = ? ORDER BY name ASC", [id]);
+  await ensurePageSortColumn();
+  const pages = await query<Row>("SELECT * FROM qa_page WHERE projectId = ? ORDER BY sortOrder ASC, name ASC", [id]);
   const cases = await query<Row>("SELECT * FROM qa_test_case WHERE projectId = ?", [id]);
   const tasks = await query<Row>("SELECT id, pageId, status FROM qa_page_task WHERE projectId = ?", [id]);
   const runs = await query<Row>("SELECT * FROM qa_test_run WHERE projectId = ? ORDER BY createdAt DESC", [id]);
@@ -357,8 +479,10 @@ export async function findProjectDashboard(id: string) {
       tasks: tasks.filter((task) => String(task.pageId) === String(page.id)),
     })),
     cases: cases.map((item) => ({
-      ...item,
       id: String(item.id),
+      caseKey: String(item.caseKey ?? ""),
+      title: String(item.title ?? ""),
+      priority: String(item.priority ?? "P2"),
       page: item.pageId ? { name: String(pageById.get(String(item.pageId))?.name ?? "") } : null,
     })),
     runs: runs.map((run) => ({
@@ -391,8 +515,9 @@ export async function findProjectWorkQueue(id: string) {
   const project = await findProjectById(id);
   if (!project) return null;
   const owner = await findUserById(project.ownerId);
+  await ensurePageSortColumn();
   const pages = await query<{ id: string; name: string }>(
-    "SELECT id, name FROM qa_page WHERE projectId = ? ORDER BY name ASC",
+    "SELECT id, name FROM qa_page WHERE projectId = ? ORDER BY sortOrder ASC, name ASC",
     [id],
   );
   const tasks = await query<{ pageId: string }>("SELECT pageId FROM qa_page_task WHERE projectId = ?", [id]);
@@ -454,11 +579,15 @@ export type PageTaskRecord = {
   firstResponseAt: Date | null;
   resolutionAt: Date | null;
   sortOrder: number;
+  number: number;
+  taskKey: string;
   createdAt: Date;
   updatedAt: Date;
 };
 
 function mapTask(row: Row): PageTaskRecord {
+  const number = Number(row.number) || 0;
+  const projectCode = String(row.projectCode ?? "").toUpperCase();
   return {
     id: String(row.id),
     projectId: String(row.projectId),
@@ -477,20 +606,36 @@ function mapTask(row: Row): PageTaskRecord {
     firstResponseAt: asDate(row.firstResponseAt as Date | string | null),
     resolutionAt: asDate(row.resolutionAt as Date | string | null),
     sortOrder: Number(row.sortOrder) || 0,
+    number,
+    taskKey: String(row.taskKey || "") || (projectCode && number ? formatTaskKey(projectCode, number) : ""),
     createdAt: asDate(row.createdAt as Date | string) ?? new Date(),
     updatedAt: asDate(row.updatedAt as Date | string) ?? new Date(),
   };
 }
 
 export async function findPageTaskById(id: string) {
-  const row = await queryOne<Row>("SELECT * FROM qa_page_task WHERE id = ? LIMIT 1", [id]);
+  const row = await queryOne<Row>(
+    `SELECT t.*, p.code AS projectCode
+     FROM qa_page_task t
+     JOIN qa_project p ON p.id = t.projectId
+     WHERE t.id = ?
+     LIMIT 1`,
+    [id],
+  );
   return row ? mapTask(row) : null;
 }
 
 export async function findPageTasksForBoard(projectId: string) {
-  const tasks = (await query<Row>("SELECT * FROM qa_page_task WHERE projectId = ? ORDER BY createdAt DESC", [projectId])).map(
-    mapTask,
-  );
+  const tasks = (
+    await query<Row>(
+      `SELECT t.*, p.code AS projectCode
+       FROM qa_page_task t
+       JOIN qa_project p ON p.id = t.projectId
+       WHERE t.projectId = ?
+       ORDER BY t.createdAt DESC`,
+      [projectId],
+    )
+  ).map(mapTask);
   const pages = await query<{ id: string; name: string }>("SELECT id, name FROM qa_page WHERE projectId = ?", [projectId]);
   const users = await query<{ id: string; name: string }>("SELECT id, name FROM qa_user");
   const counts = await query<{ taskId: string; total: number }>(
@@ -509,6 +654,190 @@ export async function findPageTasksForBoard(projectId: string) {
     reporter: task.reporterId ? { name: userById.get(task.reporterId) ?? null } : null,
     _count: { comments: countById.get(task.id) ?? 0 },
   }));
+}
+
+export type TodayTaskRow = {
+  id: string;
+  taskKey: string;
+  title: string;
+  details: string | null;
+  notes: string[];
+  status: string;
+  priority: string;
+  kind: string;
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  pageId: string;
+  pageName: string;
+  assigneeNames: string[];
+  dueAt: string;
+  createdAt: string;
+  reason: TodayReason;
+  href: string;
+};
+
+export async function findTodayTasks(projectId?: string) {
+  const rows = await query<Row>(
+    projectId
+      ? `SELECT t.*, p.code AS projectCode, p.name AS projectName, pg.name AS pageName
+         FROM qa_page_task t
+         JOIN qa_project p ON p.id = t.projectId
+         JOIN qa_page pg ON pg.id = t.pageId
+         WHERE t.projectId = ?
+         ORDER BY t.sortOrder ASC, t.createdAt DESC`
+      : `SELECT t.*, p.code AS projectCode, p.name AS projectName, pg.name AS pageName
+         FROM qa_page_task t
+         JOIN qa_project p ON p.id = t.projectId
+         JOIN qa_page pg ON pg.id = t.pageId
+         WHERE p.status = 'active'
+         ORDER BY t.createdAt DESC`,
+    projectId ? [projectId] : [],
+  );
+  const users = await query<{ id: string; name: string }>("SELECT id, name FROM qa_user");
+  const userById = new Map(users.map((user) => [user.id, user.name]));
+  const rank: Record<TodayReason, number> = {
+    overdue: 0,
+    due_today: 1,
+    in_progress: 2,
+    created_today: 3,
+    done_today: 4,
+  };
+  const mapped = rows
+    .map((row) => {
+      const task = mapTask(row);
+      const reason = todayReason(task);
+      if (!reason) return null;
+      const assigneeIds = parseAssigneeIds(task.assigneeIds, task.assigneeId);
+      return {
+        id: task.id,
+        taskKey: task.taskKey || formatTaskKey(String(row.projectCode || "PRJ"), task.number),
+        title: task.title,
+        details: task.details,
+        notes: [] as string[],
+        status: task.status,
+        priority: task.priority,
+        kind: task.kind,
+        projectId: task.projectId,
+        projectName: String(row.projectName || ""),
+        projectCode: String(row.projectCode || ""),
+        pageId: task.pageId,
+        pageName: String(row.pageName || ""),
+        assigneeNames: assigneeIds.map((id) => userById.get(id)).filter((name): name is string => Boolean(name)),
+        dueAt: taskDueAt(task.createdAt, task.resolutionAt).toISOString(),
+        createdAt: task.createdAt.toISOString(),
+        reason,
+        href: `/projects/${task.projectId}/pages/${task.pageId}/tasks/${task.id}`,
+      } satisfies TodayTaskRow;
+    })
+    .filter((item): item is TodayTaskRow => Boolean(item))
+    .sort((a, b) => rank[a.reason] - rank[b.reason] || a.dueAt.localeCompare(b.dueAt));
+
+  const todayIds = mapped.map((item) => item.id);
+  const comments = todayIds.length
+    ? await query<{ taskId: string; body: string }>(
+        `SELECT taskId, body FROM qa_page_task_comment
+         WHERE taskId IN (${placeholders(todayIds.length)}) AND createdAt >= CURDATE()
+         ORDER BY createdAt ASC`,
+        todayIds,
+      )
+    : [];
+  const notesByTask = new Map<string, string[]>();
+  for (const comment of comments) {
+    const body = String(comment.body || "").trim();
+    if (!body) continue;
+    notesByTask.set(String(comment.taskId), [...(notesByTask.get(String(comment.taskId)) ?? []), body]);
+  }
+  return mapped.map((item) => ({ ...item, notes: notesByTask.get(item.id) ?? item.notes }));
+}
+
+export type TodayTestingRow = {
+  id: string;
+  caseKey: string;
+  title: string;
+  result: string;
+  priority: string;
+  projectId: string;
+  projectName: string;
+  projectCode: string;
+  pageName: string;
+  runName: string;
+  assigneeName: string | null;
+  dueAt: string | null;
+  reason: TodayReason;
+  href: string;
+};
+
+export async function findTodayTesting(projectId?: string) {
+  const rows = await query<Row>(
+    projectId
+      ? `SELECT i.*, c.caseKey, c.title, c.priority, c.pageId, p.name AS pageName,
+                pr.id AS projectId, pr.name AS projectName, pr.code AS projectCode,
+                r.name AS runName, r.createdAt AS runCreatedAt, r.dueDate AS runDueDate, u.name AS assigneeName
+         FROM qa_run_item i
+         JOIN qa_test_run r ON r.id = i.runId
+         JOIN qa_test_case c ON c.id = i.caseId
+         JOIN qa_project pr ON pr.id = c.projectId
+         LEFT JOIN qa_page p ON p.id = c.pageId
+         LEFT JOIN qa_user u ON u.id = i.assigneeId
+         WHERE c.projectId = ? AND r.status = 'open'
+         ORDER BY i.dueDate ASC`
+      : `SELECT i.*, c.caseKey, c.title, c.priority, c.pageId, p.name AS pageName,
+                pr.id AS projectId, pr.name AS projectName, pr.code AS projectCode,
+                r.name AS runName, r.createdAt AS runCreatedAt, r.dueDate AS runDueDate, u.name AS assigneeName
+         FROM qa_run_item i
+         JOIN qa_test_run r ON r.id = i.runId
+         JOIN qa_test_case c ON c.id = i.caseId
+         JOIN qa_project pr ON pr.id = c.projectId
+         LEFT JOIN qa_page p ON p.id = c.pageId
+         LEFT JOIN qa_user u ON u.id = i.assigneeId
+         WHERE pr.status = 'active' AND r.status = 'open'
+         ORDER BY i.dueDate ASC`,
+    projectId ? [projectId] : [],
+  );
+  const rank: Record<TodayReason, number> = {
+    overdue: 0,
+    due_today: 1,
+    in_progress: 2,
+    created_today: 3,
+    done_today: 4,
+  };
+  return rows
+    .map((row) => {
+      const createdAt =
+        asDate(row.startedAt as Date | string | null) ??
+        asDate(row.runCreatedAt as Date | string | null) ??
+        asDate(row.dueDate as Date | string | null) ??
+        new Date();
+      const updatedAt = asDate(row.finishedAt as Date | string | null) ?? asDate(row.startedAt as Date | string | null);
+      const dueDate =
+        asDate(row.dueDate as Date | string | null) ?? asDate(row.runDueDate as Date | string | null);
+      const reason = testingTodayReason({
+        result: String(row.result),
+        createdAt,
+        updatedAt,
+        dueDate,
+      });
+      if (!reason) return null;
+      return {
+        id: String(row.id),
+        caseKey: String(row.caseKey),
+        title: String(row.title),
+        result: String(row.result),
+        priority: String(row.priority),
+        projectId: String(row.projectId),
+        projectName: String(row.projectName || ""),
+        projectCode: String(row.projectCode || ""),
+        pageName: String(row.pageName || ""),
+        runName: String(row.runName || ""),
+        assigneeName: row.assigneeName ? String(row.assigneeName) : null,
+        dueAt: dueDate?.toISOString() ?? null,
+        reason,
+        href: `/execute/${row.id}`,
+      } satisfies TodayTestingRow;
+    })
+    .filter((item): item is TodayTestingRow => Boolean(item))
+    .sort((a, b) => rank[a.reason] - rank[b.reason] || (a.dueAt || "").localeCompare(b.dueAt || ""));
 }
 
 export async function findPageTaskDetail(taskId: string) {
@@ -536,7 +865,7 @@ export async function findPageTaskDetail(taskId: string) {
   ]);
   return {
     ...task,
-    project: { name: project?.name ?? "" },
+    project: { name: project?.name ?? "", code: project?.code ?? "PRJ", type: project?.type ?? "tasks" },
     page: { name: page?.name ?? "" },
     assignee,
     reporter,
@@ -552,8 +881,8 @@ export async function findPageTaskDetail(taskId: string) {
 }
 
 export async function findSiblingTasks(projectId: string, taskId: string) {
-  return query<{ id: string; title: string; pageId: string; linkedTaskIds: string | null }>(
-    "SELECT id, title, pageId, linkedTaskIds FROM qa_page_task WHERE projectId = ? AND id <> ? ORDER BY createdAt DESC LIMIT 80",
+  return query<{ id: string; title: string; pageId: string; taskKey: string | null; number: number; linkedTaskIds: string | null }>(
+    "SELECT id, title, pageId, taskKey, `number`, linkedTaskIds FROM qa_page_task WHERE projectId = ? AND id <> ? ORDER BY createdAt DESC LIMIT 80",
     [projectId, taskId],
   );
 }
@@ -572,28 +901,41 @@ export async function createPageTask(data: {
   assigneeIds: string | null;
   reporterId: string;
 }) {
-  const id = createId();
-  await execute(
-    `INSERT INTO qa_page_task
-      (id, projectId, pageId, kind, title, details, priority, status, parentId, labels, assigneeId, assigneeIds, reporterId, sortOrder, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW(3), NOW(3))`,
-    [
-      id,
-      data.projectId,
-      data.pageId,
-      data.kind,
-      data.title,
-      data.details,
-      data.priority,
-      data.status,
-      data.parentId,
-      data.labels,
-      data.assigneeId,
-      data.assigneeIds,
-      data.reporterId,
-    ],
-  );
-  return { id };
+  return withTransaction(async (conn) => {
+    const [projectRows] = await conn.execute("SELECT code FROM qa_project WHERE id = ? FOR UPDATE", [data.projectId]);
+    const project = (projectRows as { code?: string }[])[0];
+    const code = String(project?.code || "PRJ").toUpperCase();
+    const [maxRows] = await conn.execute(
+      "SELECT COALESCE(MAX(`number`), 0) AS maxNum FROM qa_page_task WHERE projectId = ? FOR UPDATE",
+      [data.projectId],
+    );
+    const number = Number((maxRows as { maxNum?: number }[])[0]?.maxNum || 0) + 1;
+    const key = formatTaskKey(code, number);
+    const id = createId();
+    await conn.execute(
+      `INSERT INTO qa_page_task
+        (id, projectId, pageId, kind, title, details, priority, status, parentId, labels, assigneeId, assigneeIds, reporterId, sortOrder, \`number\`, taskKey, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, NOW(3), NOW(3))`,
+      [
+        id,
+        data.projectId,
+        data.pageId,
+        data.kind,
+        data.title,
+        data.details,
+        data.priority,
+        data.status,
+        data.parentId,
+        data.labels,
+        data.assigneeId,
+        data.assigneeIds,
+        data.reporterId,
+        number,
+        key,
+      ],
+    );
+    return { id, taskKey: key, number };
+  });
 }
 
 export async function updatePageTask(
@@ -929,7 +1271,7 @@ export async function findRunItemById(id: string) {
       preconditions: testCase?.preconditions == null ? null : String(testCase.preconditions),
       steps: String(testCase?.steps ?? ""),
       expected: String(testCase?.expected ?? ""),
-      project: { name: project?.name ?? "" },
+      project: { id: project?.id ?? "", name: project?.name ?? "" },
       module,
       page: page ? { name: String(page.name) } : null,
     },
@@ -1135,6 +1477,104 @@ export async function findMyWork(userId: string) {
   };
 }
 
+async function loadDashboardTasks(userId?: string) {
+  const rows = await query<Row>(
+    `SELECT t.*, p.code AS projectCode, p.name AS projectName
+     FROM qa_page_task t
+     JOIN qa_project p ON p.id = t.projectId
+     ORDER BY t.updatedAt DESC`,
+  );
+  const mapped: DashboardTask[] = rows.map((row) => {
+    const task = mapTask(row);
+    return {
+      href: `/projects/${task.projectId}/pages/${task.pageId}/tasks/${task.id}`,
+      taskKey: task.taskKey || formatTaskKey(String(row.projectCode || "PRJ"), task.number),
+      title: task.title,
+      status: task.status,
+      kind: task.kind,
+      assigneeIds: parseAssigneeIds(task.assigneeIds, task.assigneeId),
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      dueAt: taskDueAt(task.createdAt, task.resolutionAt),
+      projectId: task.projectId,
+      projectName: String(row.projectName || ""),
+      projectCode: String(row.projectCode || ""),
+    };
+  });
+  return userId ? mapped.filter((task) => task.assigneeIds.includes(userId)) : mapped;
+}
+
+export async function findWorkDashboard(options?: { userId?: string; rangeDays?: DashboardRange | string | null }) {
+  const [tasks, users] = await Promise.all([
+    loadDashboardTasks(options?.userId),
+    query<{ id: string; name: string }>("SELECT id, name FROM qa_user"),
+  ]);
+  const userNames = new Map(users.map((user) => [user.id, user.name]));
+  return buildWorkDashboard(tasks, userNames, { rangeDays: parseRangeDays(String(options?.rangeDays ?? "")) });
+}
+
+export async function findWorkNotices(userId?: string) {
+  const dash = await findWorkDashboard({ userId });
+  return dash.attention.slice(0, 8);
+}
+
+export async function findIssueQueue(userId?: string) {
+  const tasks = await loadDashboardTasks(userId);
+  return tasks.filter((task) => (ISSUE_KINDS as readonly string[]).includes(task.kind));
+}
+
+export async function searchWorkspace(raw: string, userId?: string) {
+  const q = raw.trim().toLowerCase();
+  if (q.length < 2) return { tasks: [] as DashboardTask[], projects: [] as { id: string; name: string; code: string; href: string }[] };
+
+  const [tasks, projects] = await Promise.all([
+    loadDashboardTasks(userId),
+    query<{ id: string; name: string; code: string | null }>(
+      "SELECT id, name, code FROM qa_project WHERE status = 'active' ORDER BY name ASC",
+    ),
+  ]);
+
+  const matchedTasks = tasks
+    .filter((task) =>
+      [task.title, task.taskKey, task.projectName, task.projectCode, task.kind].join(" ").toLowerCase().includes(q),
+    )
+    .slice(0, 8);
+  const matchedProjects = projects
+    .filter((project) => `${project.name} ${project.code ?? ""}`.toLowerCase().includes(q))
+    .slice(0, 6)
+    .map((project) => ({
+      id: String(project.id),
+      name: String(project.name),
+      code: String(project.code || "").toUpperCase(),
+      href: `/projects/${project.id}`,
+    }));
+  return { tasks: matchedTasks, projects: matchedProjects };
+}
+
+export async function findSubmittedReports() {
+  const rows = await query<Row>(
+    `SELECT r.id, r.kind, r.body, r.submittedAt, r.createdAt, r.projectId, r.taskId,
+            p.name AS projectName, p.code AS projectCode, u.name AS userName
+     FROM qa_work_report r
+     JOIN qa_project p ON p.id = r.projectId
+     JOIN qa_user u ON u.id = r.userId
+     WHERE r.submittedAt IS NOT NULL
+     ORDER BY r.submittedAt DESC
+     LIMIT 40`,
+  );
+  return rows.map((row) => ({
+    id: String(row.id),
+    kind: String(row.kind),
+    body: row.body == null ? "" : String(row.body),
+    submittedAt: asDate(row.submittedAt as Date | string) ?? new Date(),
+    projectId: String(row.projectId),
+    projectName: String(row.projectName || ""),
+    projectCode: String(row.projectCode || ""),
+    userName: String(row.userName || ""),
+    href: `/projects/${row.projectId}/today`,
+  }));
+}
+
 export async function loadSortOrders(projectId: string) {
   const rows = await query<{ id: string; sortOrder: number }>(
     "SELECT id, sortOrder FROM qa_page_task WHERE projectId = ?",
@@ -1157,4 +1597,117 @@ export async function writeTaskSortOrder(id: string, sortOrder: number, status?:
     return;
   }
   await execute("UPDATE qa_page_task SET sortOrder = ? WHERE id = ?", [sortOrder, id]);
+}
+
+export async function findProjectBoardLogs(projectId: string) {
+  const rows = await query<Row>(
+    `SELECT a.id, a.message, a.createdAt, a.entityType, u.name AS userName, t.taskKey, t.title
+     FROM qa_activity a
+     JOIN qa_user u ON u.id = a.userId
+     LEFT JOIN qa_page_task t ON t.id = a.entityId AND a.entityType = 'page_task'
+     WHERE (a.entityType = 'page_task' AND t.projectId = ?)
+        OR (a.entityType IN ('work_report', 'project') AND a.entityId = ?)
+     ORDER BY a.createdAt DESC
+     LIMIT 80`,
+    [projectId, projectId],
+  );
+  return rows.map((row) => ({
+    id: String(row.id),
+    message: String(row.message),
+    createdAt: (asDate(row.createdAt as Date | string) ?? new Date()).toISOString(),
+    userName: String(row.userName),
+    taskKey: row.taskKey ? String(row.taskKey) : null,
+  }));
+}
+
+export async function findOpenDayReport(projectId: string) {
+  const row = await queryOne<Row>(
+    `SELECT * FROM qa_work_report
+     WHERE projectId = ? AND kind = 'day_complete' AND createdAt >= CURDATE()
+     ORDER BY createdAt DESC
+     LIMIT 1`,
+    [projectId],
+  );
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    projectId: String(row.projectId),
+    kind: String(row.kind),
+    body: row.body == null ? null : String(row.body),
+    dueAt: asDate(row.dueAt as Date | string | null)?.toISOString() ?? null,
+    submittedAt: asDate(row.submittedAt as Date | string | null)?.toISOString() ?? null,
+    createdAt: (asDate(row.createdAt as Date | string) ?? new Date()).toISOString(),
+  };
+}
+
+export async function findTodayDayReports() {
+  const rows = await query<Row>(
+    `SELECT * FROM qa_work_report
+     WHERE kind = 'day_complete' AND createdAt >= CURDATE()
+     ORDER BY createdAt DESC`,
+  );
+  return rows.map((row) => ({
+    id: String(row.id),
+    projectId: String(row.projectId),
+    kind: String(row.kind),
+    body: row.body == null ? null : String(row.body),
+    dueAt: asDate(row.dueAt as Date | string | null)?.toISOString() ?? null,
+    submittedAt: asDate(row.submittedAt as Date | string | null)?.toISOString() ?? null,
+    createdAt: (asDate(row.createdAt as Date | string) ?? new Date()).toISOString(),
+  }));
+}
+
+export async function requestDayReport(projectId: string, userId: string) {
+  const today = await findOpenDayReport(projectId);
+  if (today?.submittedAt) return null;
+  if (today) return today;
+  const id = createId();
+  const dueAt = new Date(Date.now() + 15 * 60 * 1000);
+  await execute(
+    `INSERT INTO qa_work_report (id, projectId, userId, kind, dueAt, createdAt)
+     VALUES (?, ?, ?, 'day_complete', ?, NOW(3))`,
+    [id, projectId, userId, dueAt],
+  );
+  await logActivity(
+    "work_report",
+    projectId,
+    userId,
+    `Today's work report requested. Due by ${formatActivityTime(dueAt)}.`,
+  );
+  return {
+    id,
+    projectId,
+    kind: "day_complete",
+    body: null,
+    dueAt: dueAt.toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function submitWorkReport(data: {
+  id?: string;
+  projectId: string;
+  taskId?: string | null;
+  userId: string;
+  kind: "task_done" | "day_complete";
+  body: string;
+}) {
+  const body = data.body.trim();
+  if (data.kind === "day_complete" && data.id) {
+    await execute("UPDATE qa_work_report SET body = ?, submittedAt = NOW(3) WHERE id = ?", [body, data.id]);
+  } else {
+    await execute(
+      `INSERT INTO qa_work_report (id, projectId, taskId, userId, kind, body, submittedAt, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+      [createId(), data.projectId, data.taskId ?? null, data.userId, data.kind, body],
+    );
+  }
+  await logActivity(
+    data.kind === "day_complete" ? "work_report" : "page_task",
+    data.kind === "day_complete" ? data.projectId : data.taskId || data.projectId,
+    data.userId,
+    data.kind === "day_complete"
+      ? `Submitted today's work report at ${formatActivityTime()}: ${body}`
+      : `Done report at ${formatActivityTime()}: ${body}`,
+  );
 }

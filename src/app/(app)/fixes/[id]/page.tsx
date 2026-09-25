@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
-import { canManage, canUpdateFix, requireSession } from "@/lib/auth";
+import { canUpdateFix, hasAccess, requireSession } from "@/lib/auth";
 import { findActivityForEntities, findFixById, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { FixBadge, PriorityBadge } from "@/components/ui/status-badge";
 import { assignFixAction, updateFixAction, wontFixAction } from "@/app/actions/fixes";
 import { formatDateTime } from "@/lib/format";
-import Link from "next/link";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function FixDetailPage({
   params,
@@ -22,8 +22,8 @@ export default async function FixDetailPage({
   if (!fix || !fix.runItem) notFound();
 
   const canSee =
-    canManage(user.role) ||
-    (user.role === "FIXER" && (!fix.assigneeId || fix.assigneeId === user.id)) ||
+    (await hasAccess(user.role, "viewAll")) ||
+    (await canUpdateFix(user.role, fix.assigneeId, user.id)) ||
     fix.runItem.assigneeId === user.id;
   if (!canSee) redirect("/");
 
@@ -31,8 +31,8 @@ export default async function FixDetailPage({
 
   const fixers = await findUsers({ active: true, role: "FIXER", orderBy: "name" });
 
-  const manage = canManage(user.role);
-  const canUpdate = canUpdateFix(user.role, fix.assigneeId, user.id);
+  const manage = await hasAccess(user.role, "viewAll");
+  const canUpdate = await canUpdateFix(user.role, fix.assigneeId, user.id);
 
   return (
     <>
@@ -41,7 +41,8 @@ export default async function FixDetailPage({
         <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1.15fr_.85fr]">
           <section className="space-y-5 rounded-xl border border-line bg-card p-6">
             <div>
-              <p className="text-xs uppercase tracking-wide text-muted">
+              <BackLink href={`/runs/${fix.runItem.run.id}`} label={fix.runItem.run.name} />
+              <p className="mt-2 text-xs uppercase tracking-wide text-muted">
                 {fix.runItem.case.project.name} · {fix.runItem.run.name}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -68,13 +69,13 @@ export default async function FixDetailPage({
             </div>
 
             {fix.fixerNotes ? (
-              <div className="rounded-lg bg-[#f8f9fa] p-4">
+              <div className="rounded-lg bg-[#F8FAFC] p-4">
                 <h2 className="text-sm font-medium">Fixer notes</h2>
                 <p className="mt-1 text-sm text-muted">{fix.fixerNotes}</p>
               </div>
             ) : null}
 
-            <div className="rounded-lg bg-[#f8f9fa] p-4">
+            <div className="rounded-lg bg-[#F8FAFC] p-4">
               <h2 className="text-sm font-medium">Original testing point</h2>
               <p className="mt-1 text-sm font-medium text-ink">
                 {fix.runItem.case.caseKey} · {fix.runItem.case.title}
@@ -124,7 +125,7 @@ export default async function FixDetailPage({
                   placeholder="What did you change?"
                 />
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button name="status" value="in_progress" className="rounded-lg border border-line py-2 text-sm font-medium hover:bg-[#f1f3f4]">
+                  <button name="status" value="in_progress" className="rounded-lg border border-line py-2 text-sm font-medium hover:bg-[#F1F5F9]">
                     In progress
                   </button>
                   <button name="status" value="fixed" className="rounded-lg bg-blue py-2 text-sm font-medium text-white hover:bg-blue-hover">

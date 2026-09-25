@@ -18,6 +18,8 @@ export default function RootError({
   const staleSession =
     message.includes("session") &&
     (message.includes("Foreign key constraint violated") || message.includes("P2003"));
+  const staleDeploy =
+    message.includes("Server Action") && message.includes("was not found on the server");
 
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
@@ -28,7 +30,9 @@ export default function RootError({
             ? "Database tables are missing"
             : staleSession
               ? "Please sign in again"
-              : "Something went wrong"}
+              : staleDeploy
+                ? "A new version is live"
+                : "Something went wrong"}
       </h1>
       <p className="mt-2 text-sm text-muted">
         {dbDown
@@ -37,14 +41,22 @@ export default function RootError({
             ? "The app database is missing required tables. Stop and run npm run db:setup, then refresh this page."
             : staleSession
               ? "Your saved login does not match the current database. Sign out, sign in, then try again."
-              : message || "Refresh this page and try the action again."}
+              : staleDeploy
+                ? "This tab is still using the previous deploy. Refresh the page to load the latest QA Tracker, then continue."
+                : message || "Refresh this page and try the action again."}
       </p>
       <button
         type="button"
-        onClick={() => reset()}
+        onClick={() => {
+          if (staleDeploy) {
+            window.location.reload();
+            return;
+          }
+          reset();
+        }}
         className="mt-6 w-fit rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white"
       >
-        Try again
+        {staleDeploy ? "Refresh page" : "Try again"}
       </button>
     </main>
   );

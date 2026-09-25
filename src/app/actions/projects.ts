@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { canManage, requireSession } from "@/lib/auth";
+import { canManage, hasAccess, requireSession } from "@/lib/auth";
 import {
   createPage,
   createProject,
@@ -12,20 +12,31 @@ import {
   findProjectById,
   mergeDuplicatePages,
   updateProject,
+  writePageSortOrders,
 } from "@/lib/data";
 import { uniquePageNames } from "@/lib/pages";
+import { clipText, parseWorkType } from "@/lib/work-type";
+import { parseDateInput } from "@/lib/format";
+
+function readProjectFields(formData: FormData) {
+  return {
+    name: clipText(String(formData.get("name") || ""), 191),
+    type: parseWorkType(String(formData.get("type") || "tasks")),
+    url: clipText(String(formData.get("url") || ""), 2048),
+    rsvpUrl: clipText(String(formData.get("rsvpUrl") || ""), 2048),
+    figmaUrl: clipText(String(formData.get("figmaUrl") || ""), 2048),
+    deadline: parseDateInput(String(formData.get("deadline") || "")),
+  };
+}
 
 export async function createProjectAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) {
+  if (!(await canManage(session.role))) {
     redirect("/projects");
   }
 
-  const name = String(formData.get("name") || "").trim();
-  const type = String(formData.get("type") || "website");
-  const url = String(formData.get("url") || "").trim();
-  const rsvpUrl = String(formData.get("rsvpUrl") || "").trim();
-  const pages = uniquePageNames(formData.getAll("pages").map(String));
+  const { name, type, url, rsvpUrl, figmaUrl, deadline } = readProjectFields(formData);
+  const pages = uniquePageNames(formData.getAll("pages").map(String)).map((page) => clipText(page, 191));
 
   if (!name) {
     redirect("/projects/new?error=Project%20name%20is%20required");
@@ -38,20 +49,46 @@ export async function createProjectAction(formData: FormData) {
       type,
       url: url || null,
       rsvpUrl: rsvpUrl || null,
+      figmaUrl: figmaUrl || null,
+      deadline,
       ownerId: session.id,
-      pages,
+      pages: pages.length ? pages : ["General"],
     });
   } catch (error) {
     console.error("Could not create project", error);
-    redirect("/login?expired=1&error=Your%20session%20is%20out%20of%20date.%20Sign%20in%20again.");
+    redirect("/projects/new?error=Could%20not%20save%20the%20project.%20Check%20the%20database%20and%20try%20again.");
   }
 
+  revalidatePath("/projects");
   redirect(`/projects/${project.id}`);
+}
+
+export async function updateProjectDetailsAction(formData: FormData) {
+  const session = await requireSession();
+  if (!(await canManage(session.role))) return { ok: false as const, error: "You cannot edit projects." };
+
+  const id = String(formData.get("id") || "");
+  const { name, url, rsvpUrl, figmaUrl, deadline } = readProjectFields(formData);
+  if (!id) return { ok: false as const, error: "Missing project." };
+  if (!name) return { ok: false as const, error: "Project name is required." };
+
+  await updateProject(id, {
+    name,
+    url: url || null,
+    rsvpUrl: rsvpUrl || null,
+    figmaUrl: figmaUrl || null,
+    deadline,
+  });
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${id}`);
+  revalidatePath(`/projects/${id}/edit`);
+  return { ok: true as const };
 }
 
 export async function archiveProjectAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManage(session.role))) return;
 
   const id = String(formData.get("id") || "");
   await updateProject(id, { status: "archived" });
@@ -60,7 +97,7 @@ export async function archiveProjectAction(formData: FormData) {
 
 export async function deleteProjectAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManage(session.role))) return;
 
   const id = String(formData.get("id") || "");
   if (!id) return;
@@ -74,7 +111,7 @@ export async function deleteProjectAction(formData: FormData) {
 
 export async function updateProjectLinksAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManage(session.role))) return;
 
   const id = String(formData.get("id") || "");
   const url = String(formData.get("url") || "").trim();
@@ -92,7 +129,7 @@ export async function updateProjectLinksAction(formData: FormData) {
 
 export async function addProjectPagesAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManage(session.role))) return;
 
   const projectId = String(formData.get("projectId") || "");
   const pages = uniquePageNames([
@@ -128,7 +165,7 @@ export async function addProjectPagesAction(formData: FormData) {
 
 export async function removeProjectPageAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManage(session.role))) return;
 
   const projectId = String(formData.get("projectId") || "");
   const pageId = String(formData.get("pageId") || "");
@@ -138,4 +175,22 @@ export async function removeProjectPageAction(formData: FormData) {
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/projects/${projectId}/cases`);
+}
+
+export async function reorderProjectPagesAction(formData: FormData) {
+  const session = await requireSession();
+  const allowed =
+    (await hasAccess(session.role, "manageProjects")) || (await hasAccess(session.role, "manageTask"));
+  if (!allowed) return { ok: false as const };
+
+  const projectId = String(formData.get("projectId") || "");
+  const orderedIds = String(formData.get("orderedIds") || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!projectId || !orderedIds.length) return { ok: false as const };
+
+  await writePageSortOrders(projectId, orderedIds);
+  revalidatePath(`/projects/${projectId}`, "layout");
+  return { ok: true as const };
 }

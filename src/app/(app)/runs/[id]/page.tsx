@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canManage, requireSession } from "@/lib/auth";
+import { canManageRuns, requireSession } from "@/lib/auth";
 import { findTestRunDetail, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { StatCard } from "@/components/ui/stat-card";
 import { PriorityBadge, ResultBadge } from "@/components/ui/status-badge";
 import { assignItemsAction, closeRunAction } from "@/app/actions/runs";
-import { formatDate, percent } from "@/lib/format";
+import { formatDate, percent, roleLabel } from "@/lib/format";
+import { WorkspaceSwitch } from "@/components/projects/workspace-switch";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function RunPage({
   params,
@@ -15,12 +17,12 @@ export default async function RunPage({
 }) {
   const user = await requireSession();
   const { id } = await params;
-  const manage = canManage(user.role);
+  const manage = await canManageRuns(user.role);
 
   const run = await findTestRunDetail(id);
   if (!run) notFound();
 
-  const testers = await findUsers({ active: true, role: "TESTER", orderBy: "name" });
+  const people = await findUsers({ active: true, orderBy: "createdAt" });
 
   const counts = {
     total: run.items.length,
@@ -40,15 +42,14 @@ export default async function RunPage({
       <main className="flex-1 space-y-6 p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <Link href={`/projects/${run.projectId}`} className="text-sm text-blue hover:underline">
-              ← {run.project.name}
-            </Link>
+            <BackLink href={`/projects/${run.projectId}/testing`} label={`${run.project.name} · Testing`} />
             <h1 className="mt-2 text-2xl font-normal tracking-tight">{run.name}</h1>
             <p className="text-sm text-muted">
               {run.build ? `Build ${run.build} · ` : ""}
               Due {formatDate(run.dueDate)} · {run.status}
             </p>
           </div>
+          <WorkspaceSwitch projectId={run.projectId} active="testing" />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -65,9 +66,9 @@ export default async function RunPage({
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted">Assign selected to</span>
                 <select name="assigneeId" required className="rounded-lg border border-line px-3 py-2 text-sm">
-                  {testers.map((tester) => (
-                    <option key={tester.id} value={tester.id}>
-                      {tester.name}
+                  {people.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name} · {roleLabel(person.role)}
                     </option>
                   ))}
                 </select>
@@ -78,7 +79,7 @@ export default async function RunPage({
             </div>
             <div className="overflow-hidden rounded-lg border border-line">
               <table className="w-full text-left text-sm">
-                <thead className="bg-[#f8f9fa] text-xs uppercase text-muted">
+                <thead className="bg-[#F8FAFC] text-xs uppercase text-muted">
                   <tr>
                     <th className="px-3 py-3 font-medium"></th>
                     <th className="px-3 py-3 font-medium">Point</th>
@@ -126,7 +127,7 @@ export default async function RunPage({
         ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-card">
             <table className="w-full text-left text-sm">
-              <thead className="bg-[#f8f9fa] text-xs uppercase text-muted">
+              <thead className="bg-[#F8FAFC] text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Point</th>
                   <th className="px-4 py-3 font-medium">Assignee</th>
@@ -159,7 +160,7 @@ export default async function RunPage({
               </span>
               <input name="reason" className="w-full rounded-lg border border-line px-3 py-2 text-sm" placeholder="Force-close reason" />
             </label>
-            <button className="rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-[#f1f3f4]">
+            <button className="rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-[#F1F5F9]">
               Close run
             </button>
           </form>

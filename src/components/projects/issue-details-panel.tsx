@@ -5,18 +5,22 @@ import { useRouter } from "next/navigation";
 import { BookOpen, Headphones, UserRound, X } from "lucide-react";
 import { assignPageTaskAction, updatePageTaskAction, updatePageTaskFieldsAction } from "@/app/actions/page-tasks";
 import { initials, pageTaskKindLabel } from "@/lib/format";
-import { PAGE_TASK_KINDS } from "@/lib/types";
+import { kindsForFilter } from "@/lib/work-type";
+import { toast } from "@/components/ui/toast";
 
 type Person = { id: string; name: string };
 
 const priorityMeta: Record<string, { bars: number; color: string; label: string }> = {
-  P0: { bars: 3, color: "bg-[#c9372c]", label: "Highest" },
-  P1: { bars: 3, color: "bg-[#e56910]", label: "High" },
-  P2: { bars: 2, color: "bg-[#e56910]", label: "Medium" },
+  P0: { bars: 3, color: "bg-[#DC2626]", label: "Highest" },
+  P1: { bars: 3, color: "bg-[#D97706]", label: "High" },
+  P2: { bars: 2, color: "bg-[#D97706]", label: "Medium" },
   P3: { bars: 1, color: "bg-[#22a06b]", label: "Low" },
 };
 
 const articles: Record<string, { title: string; body: string }[]> = {
+  task: [
+    { title: "Assigning work", body: "Give the task an owner, set priority, then move it to In progress when work starts." },
+  ],
   issue: [
     { title: "How we triage IT help", body: "Assign an owner, set priority, then move status to In progress when work starts." },
     { title: "Writing a useful summary", body: "Say what is broken, where it happens, and what should happen instead." },
@@ -38,7 +42,7 @@ const articles: Record<string, { title: string; body: string }[]> = {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[128px_1fr] items-start gap-3 py-2 text-sm">
-      <span className="pt-1.5 text-[#626f86]">{label}</span>
+      <span className="pt-1.5 text-[#64748B]">{label}</span>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -51,7 +55,7 @@ function PriorityBars({ priority }: { priority: string }) {
       {Array.from({ length: 3 }).map((_, index) => (
         <span
           key={index}
-          className={`w-[3px] rounded-sm ${index < meta.bars ? meta.color : "bg-[#dcdfe4]"}`}
+          className={`w-[3px] rounded-sm ${index < meta.bars ? meta.color : "bg-[#E2E8F0]"}`}
           style={{ height: 6 + index * 3 }}
         />
       ))}
@@ -66,6 +70,7 @@ export function IssueDetailsPanel({
   title,
   details,
   canEdit,
+  workType,
 }: {
   task: {
     id: string;
@@ -84,6 +89,7 @@ export function IssueDetailsPanel({
   title: string;
   details: string;
   canEdit: boolean;
+  workType?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -128,6 +134,7 @@ export function IssueDetailsPanel({
       await action(data);
       router.refresh();
       setSaved(note);
+      toast(note);
       setTimeout(() => setSaved(""), 1600);
     });
   }
@@ -162,9 +169,9 @@ export function IssueDetailsPanel({
               selectedPeople.map((person) => (
                 <span
                   key={person.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#f1f2f4] px-2 py-0.5 text-xs font-medium text-[#172b4d]"
+                  className="inline-flex items-center gap-1 rounded-full bg-[#F1F5F9] px-2 py-0.5 text-xs font-medium text-[#172033]"
                 >
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#dcdfe4] text-[9px] font-semibold">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#E2E8F0] text-[9px] font-semibold">
                     {initials(person.name)}
                   </span>
                   {person.name}
@@ -185,7 +192,7 @@ export function IssueDetailsPanel({
                 </span>
               ))
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[#44546f]">
+              <span className="inline-flex items-center gap-1.5 text-[#64748B]">
                 <UserRound size={14} />
                 Unassigned
               </span>
@@ -193,7 +200,7 @@ export function IssueDetailsPanel({
             {canEdit && !assigneeIds.includes(currentUserId) ? (
               <button
                 type="button"
-                className="text-sm font-medium text-[#0c66e4] hover:underline"
+                className="text-sm font-medium text-[#2563EB] hover:underline"
                 onClick={() => saveAssignees([...assigneeIds, currentUserId], "Assigned to you")}
               >
                 Assign to me
@@ -209,7 +216,7 @@ export function IssueDetailsPanel({
               if (!value || assigneeIds.includes(value)) return;
               saveAssignees([...assigneeIds, value], "Assignee updated");
             }}
-            className="w-full rounded-[3px] border border-[#dcdfe4] bg-white px-2 py-1.5 text-sm hover:bg-[#f7f8f9]"
+            className="w-full rounded-[3px] border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm hover:bg-[#F8FAFC]"
           >
             <option value="">{selectedPeople.length ? "Add another person" : "Add assignee"}</option>
             {people
@@ -226,7 +233,7 @@ export function IssueDetailsPanel({
 
       <Field label="Reporter">
         <span className="inline-flex items-center gap-1.5 pt-1">
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[10px] font-semibold">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[10px] font-semibold">
             {initials(task.reporterName)}
           </span>
           {task.reporterName}
@@ -235,7 +242,7 @@ export function IssueDetailsPanel({
 
       <Field label="Request type">
         <div className="flex items-center gap-2">
-          <Headphones size={14} className="text-[#626f86]" />
+          <Headphones size={14} className="text-[#64748B]" />
           {canEdit ? (
           <select
             value={kind}
@@ -254,9 +261,9 @@ export function IssueDetailsPanel({
                 "Request type updated",
               );
             }}
-            className="w-full rounded-[3px] border border-[#dcdfe4] bg-white px-2 py-1.5 text-sm"
+            className="w-full rounded-[3px] border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm"
           >
-            {PAGE_TASK_KINDS.map((value) => (
+            {kindsForFilter(workType, [kind]).map((value) => (
               <option key={value} value={value}>
                 {pageTaskKindLabel(value)}
               </option>
@@ -272,7 +279,7 @@ export function IssueDetailsPanel({
         <button
           type="button"
           onClick={() => setKbOpen(true)}
-          className="inline-flex items-center gap-1.5 pt-1 font-medium text-[#0c66e4] hover:underline"
+          className="inline-flex items-center gap-1.5 pt-1 font-medium text-[#2563EB] hover:underline"
         >
           <BookOpen size={14} />
           View related articles
@@ -291,7 +298,7 @@ export function IssueDetailsPanel({
               setPriority(value);
               run(updatePageTaskAction, (data) => data.set("priority", value), "Priority updated");
             }}
-            className="w-full rounded-[3px] border border-[#dcdfe4] bg-white px-2 py-1.5 text-sm"
+            className="w-full rounded-[3px] border border-[#E2E8F0] bg-white px-2 py-1.5 text-sm"
           >
             {Object.entries(priorityMeta).map(([value, meta]) => (
               <option key={value} value={value}>
@@ -311,7 +318,7 @@ export function IssueDetailsPanel({
             {chips.map((chip) => (
               <span
                 key={chip}
-                className="inline-flex items-center gap-1 rounded-full bg-[#f3e8fd] px-2 py-0.5 text-xs font-medium text-[#5e4db2]"
+                className="inline-flex items-center gap-1 rounded-full bg-[#F5F3FF] px-2 py-0.5 text-xs font-medium text-[#7C3AED]"
               >
                 {chip}
                 {canEdit ? (
@@ -338,10 +345,10 @@ export function IssueDetailsPanel({
             }}
             onBlur={addLabel}
             placeholder="Add label"
-            className="w-full rounded-[3px] border border-[#dcdfe4] px-2 py-1.5 text-sm outline-none focus:border-[#0c66e4]"
+            className="w-full rounded-[3px] border border-[#E2E8F0] px-2 py-1.5 text-sm outline-none focus:border-[#2563EB]"
           />
           ) : chips.length === 0 ? (
-            <p className="text-sm text-[#626f86]">None</p>
+            <p className="text-sm text-[#64748B]">None</p>
           ) : null}
         </div>
       </Field>
@@ -354,18 +361,18 @@ export function IssueDetailsPanel({
           <div className="relative w-full max-w-md rounded-[3px] bg-white p-5 shadow-[0_8px_16px_#091e4226]">
             <div className="mb-3 flex items-start justify-between">
               <div>
-                <h2 className="text-base font-semibold text-[#172b4d]">Related articles</h2>
-                <p className="text-xs text-[#626f86]">{pageTaskKindLabel(kind)}</p>
+                <h2 className="text-base font-semibold text-[#172033]">Related articles</h2>
+                <p className="text-xs text-[#64748B]">{pageTaskKindLabel(kind)}</p>
               </div>
-              <button type="button" onClick={() => setKbOpen(false)} className="rounded-md p-1 text-[#626f86] hover:bg-[#f1f2f4]">
+              <button type="button" onClick={() => setKbOpen(false)} className="rounded-md p-1 text-[#64748B] hover:bg-[#F1F5F9]">
                 <X size={16} />
               </button>
             </div>
             <div className="space-y-3">
               {kb.map((article) => (
-                <article key={article.title} className="rounded-[3px] border border-[#dcdfe4] p-3">
-                  <p className="text-sm font-medium text-[#172b4d]">{article.title}</p>
-                  <p className="mt-1 text-sm text-[#44546f]">{article.body}</p>
+                <article key={article.title} className="rounded-[3px] border border-[#E2E8F0] p-3">
+                  <p className="text-sm font-medium text-[#172033]">{article.title}</p>
+                  <p className="mt-1 text-sm text-[#64748B]">{article.body}</p>
                 </article>
               ))}
             </div>

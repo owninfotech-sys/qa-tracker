@@ -5,6 +5,11 @@ export function roleLabel(role: Role | string) {
     ADMIN: "Admin",
     TESTER: "Tester",
     FIXER: "Fixer",
+    Developer: "Developer",
+    Designer: "Designer",
+    PL: "PL",
+    Teacher: "Teacher",
+    Tutor: "Tutor",
   };
   return map[role] ?? role;
 }
@@ -35,6 +40,7 @@ export function fixLabel(status: FixStatus | string) {
 
 export function pageTaskKindLabel(kind: string) {
   const map: Record<string, string> = {
+    task: "Task",
     issue: "IT help",
     refine: "Refine",
     redesign: "Redesign",
@@ -46,13 +52,13 @@ export function pageTaskKindLabel(kind: string) {
 
 export function pageTaskStatusLabel(status: string) {
   const map: Record<string, string> = {
-    open: "Waiting for support",
-    waiting_customer: "Waiting for customer",
-    in_progress: "In Progress",
-    escalated: "Escalated",
-    pending: "Pending",
-    ready_for_testing: "Fixed ready for testing",
-    done: "Resolved",
+    open: "To do",
+    pending: "To do",
+    in_progress: "In progress",
+    waiting_customer: "Waiting",
+    escalated: "Blocked",
+    ready_for_testing: "In progress",
+    done: "Done",
     wont_do: "Canceled",
   };
   return map[status] ?? status;
@@ -96,7 +102,12 @@ export function formatDateTime(value?: Date | string | null) {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
   }).format(date);
+}
+
+export function formatActivityTime(value?: Date | string | null) {
+  return formatDateTime(value ?? new Date());
 }
 
 export function isOverdue(due?: Date | string | null, done?: boolean) {
@@ -116,6 +127,23 @@ export function initials(name: string) {
 export function percent(part: number, total: number) {
   if (!total) return 0;
   return Math.round((part / total) * 100);
+}
+
+export function toDateInput(value?: Date | string | null) {
+  if (!value) return "";
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function parseDateInput(value: string) {
+  const raw = value.trim();
+  if (!raw) return null;
+  const date = new Date(`${raw}T23:59:59`);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function toHref(value?: string | null) {

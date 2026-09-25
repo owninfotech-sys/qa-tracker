@@ -2,7 +2,9 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { findUserByEmail, findUserById } from "@/lib/data";
-import { isCustomRole, isRole, type Role, type SessionUser } from "@/lib/types";
+import { isRole, type Role, type SessionUser } from "@/lib/types";
+import { firstHomePath, type AccessKey } from "@/lib/access";
+import { hasAccess, roleCaps } from "@/lib/role-access";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET || "owninfotech-qa-tracker-dev-secret",
@@ -65,6 +67,7 @@ export async function requireSession() {
     name: user.name,
     email: user.email,
     role: user.role,
+    logo: user.logo,
   };
 
   if (current.id !== session.id) {
@@ -82,42 +85,64 @@ export function isAdmin(role: Role) {
   return role === "ADMIN";
 }
 
-export function canManage(role: Role) {
-  return role === "ADMIN";
+export async function homeForRole(role: Role) {
+  return firstHomePath(await roleCaps(role));
 }
 
-export function canAddCases(role: Role) {
-  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
+export async function requireAccess(role: Role, key: AccessKey) {
+  if (!(await hasAccess(role, key))) {
+    redirect(await homeForRole(role));
+  }
 }
 
-export function canEditContent(role: Role) {
-  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
+export async function canManage(role: Role) {
+  return hasAccess(role, "manageProjects");
 }
 
-export function canEditSla(role: Role) {
-  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
+export async function canAddCases(role: Role) {
+  return hasAccess(role, "createCase");
 }
 
-export function canWorkAssignedTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
-  return canEditContent(role);
+export async function canEditContent(role: Role) {
+  return hasAccess(role, "manageTask");
 }
 
-export function canCommentOnTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
-  return role === "ADMIN" || role === "TESTER" || role === "FIXER" || isCustomRole(role);
+export async function canEditSla(role: Role) {
+  return hasAccess(role, "manageTask");
 }
 
-export function canChangeTaskStatus(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
-  return canEditContent(role);
+export async function canWorkAssignedTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  return hasAccess(role, "manageTask");
 }
 
-export function canExecuteItem(role: Role, assigneeId: string | null, userId: string) {
-  return role === "ADMIN" || ((role === "TESTER" || isCustomRole(role)) && assigneeId === userId);
+export async function canCommentOnTask(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  const caps = await roleCaps(role);
+  return caps.includes("createTask") || caps.includes("manageTask") || caps.includes("updateFix") || caps.includes("testing");
 }
 
-export function isStaffEditor(role: Role) {
-  return role === "ADMIN" || role === "TESTER" || isCustomRole(role);
+export async function canChangeTaskStatus(role: Role, _assigneeId?: string | string[] | null, _userId?: string) {
+  return hasAccess(role, "manageTask");
 }
 
-export function canUpdateFix(role: Role, assigneeId: string | null, userId: string) {
-  return role === "ADMIN" || (role === "FIXER" && (assigneeId === userId || !assigneeId));
+export async function canExecuteItem(role: Role, assigneeId: string | null, userId: string) {
+  if (!(await hasAccess(role, "runTests"))) return false;
+  if (await hasAccess(role, "viewAll")) return true;
+  return assigneeId === userId;
 }
+
+export async function isStaffEditor(role: Role) {
+  const caps = await roleCaps(role);
+  return caps.includes("createCase") || caps.includes("runTests");
+}
+
+export async function canUpdateFix(role: Role, assigneeId: string | null, userId: string) {
+  if (!(await hasAccess(role, "updateFix"))) return false;
+  if (await hasAccess(role, "viewAll")) return true;
+  return !assigneeId || assigneeId === userId;
+}
+
+export async function canManageRuns(role: Role) {
+  return (await hasAccess(role, "testing")) && (await hasAccess(role, "viewAll"));
+}
+
+export { hasAccess, roleCaps };

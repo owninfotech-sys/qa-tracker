@@ -9,26 +9,31 @@ import {
   ChevronRight,
   ChevronUp,
   Clock3,
+  FileText,
   LayoutGrid,
   MessageSquare,
+  ScrollText,
   Search,
   UserRound,
 } from "lucide-react";
-import { reorderPageTasksAction } from "@/app/actions/page-tasks";
+import { reorderPageTasksAction, loadOpenDayReportAction, requestDayReportAction } from "@/app/actions/page-tasks";
 import type { ListTask } from "@/lib/work-item";
 import { formatDateTime, initials, pageTaskKindLabel, pageTaskStatusLabel } from "@/lib/format";
 import { BOARD_COLUMNS, columnForStatus, neighborColumn, sortBoardTasks, statusForColumn } from "@/lib/board";
-import { PAGE_TASK_KINDS } from "@/lib/types";
+import { kindsForFilter } from "@/lib/work-type";
+import { WorkReportDialog } from "@/components/projects/work-report-dialog";
+import { BoardLogsPanel } from "@/components/projects/board-logs";
+import { toast } from "@/components/ui/toast";
 
 const statusTone: Record<string, string> = {
-  open: "bg-[#dfe1e6] text-[#42526e]",
-  waiting_customer: "bg-[#deebff] text-[#0747a6]",
-  in_progress: "bg-[#deebff] text-[#0747a6]",
+  open: "bg-[#E2E8F0] text-[#64748B]",
+  waiting_customer: "bg-[#EFF6FF] text-[#1D4ED8]",
+  in_progress: "bg-[#EFF6FF] text-[#1D4ED8]",
   escalated: "bg-[#ffebe6] text-[#bf2600]",
-  pending: "bg-[#fff0b3] text-[#7f5f01]",
-  ready_for_testing: "bg-[#fff0b3] text-[#7f5f01]",
-  done: "bg-[#e3fcef] text-[#006644]",
-  wont_do: "bg-[#e3fcef] text-[#006644]",
+  pending: "bg-[#FEF3C7] text-[#D97706]",
+  ready_for_testing: "bg-[#FEF3C7] text-[#D97706]",
+  done: "bg-[#DCFCE7] text-[#16A34A]",
+  wont_do: "bg-[#DCFCE7] text-[#16A34A]",
 };
 
 function dueLabel(task: ListTask) {
@@ -44,13 +49,13 @@ function dueSoon(task: ListTask) {
 
 function PriorityMark({ priority }: { priority: string }) {
   const color =
-    priority === "P0" ? "text-[#c9372c]" : priority === "P1" || priority === "P2" ? "text-[#e56910]" : "text-[#22a06b]";
+    priority === "P0" ? "text-[#DC2626]" : priority === "P1" || priority === "P2" ? "text-[#D97706]" : "text-[#22a06b]";
   return (
     <span className={`inline-flex h-3.5 items-end gap-px ${color}`} title={priority}>
       {Array.from({ length: 3 }).map((_, index) => (
         <span
           key={index}
-          className={`w-[3px] rounded-sm ${index < (priority === "P3" ? 1 : priority === "P2" ? 2 : 3) ? "bg-current" : "bg-[#dcdfe4]"}`}
+          className={`w-[3px] rounded-sm ${index < (priority === "P3" ? 1 : priority === "P2" ? 2 : 3) ? "bg-current" : "bg-[#E2E8F0]"}`}
           style={{ height: 5 + index * 3 }}
         />
       ))}
@@ -59,7 +64,7 @@ function PriorityMark({ priority }: { priority: string }) {
 }
 
 function DropLine() {
-  return <div className="pointer-events-none h-1 rounded-full bg-[#0c66e4]" />;
+  return <div className="pointer-events-none h-1 rounded-full bg-[#2563EB]" />;
 }
 
 function nextCardId(node: Element) {
@@ -79,18 +84,35 @@ function groupValue(task: ListTask, group: string) {
   return "All work";
 }
 
+function remainingLabel(dueAt?: string | null) {
+  if (!dueAt) return "";
+  const ms = new Date(dueAt).getTime() - Date.now();
+  if (ms <= 0) return "Overdue";
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  return `${mins}:${String(secs).padStart(2, "0")} left`;
+}
+
 export function PageTaskBoard({
   tasks,
   canEdit,
-  currentUserId,
+  currentUserId: _currentUserId,
   role,
   toolbar,
+  workType,
+  projectId: projectIdProp,
+  pageId: pageIdProp,
+  canViewAll = false,
 }: {
   tasks: ListTask[];
   canEdit: boolean;
   currentUserId: string;
   role: string;
   toolbar?: ReactNode;
+  workType?: string;
+  projectId?: string;
+  pageId?: string;
+  canViewAll?: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -103,11 +125,82 @@ export function PageTaskBoard({
   const [overSlot, setOverSlot] = useState<{ columnId: string; beforeId: string | null } | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number; width: number } | null>(null);
   const [pending, startTransition] = useTransition();
-  const origin = useRef({ x: 0, y: 0, dragging: false, id: "" });
+  const origin = useRef({ x: 0, y: 0, dragging: false, id: "", width: 0, pointerId: -1 });
+  const itemsRef = useRef(tasks);
+  const suppressClick = useRef(false);
+  const [report, setReport] = useState<{
+    kind: "task_done" | "day_complete";
+    task?: ListTask;
+    reportId?: string;
+    dueAt?: string | null;
+  } | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [dayReport, setDayReport] = useState<{ id: string; dueAt: string | null } | null>(null);
+  const [submittedToday, setSubmittedToday] = useState(false);
+  const [remain, setRemain] = useState("");
+  const fallbackDue = useRef<string | null>(null);
+  const projectId = projectIdProp || tasks[0]?.projectId || "";
+  const pageId = pageIdProp || tasks[0]?.pageId || "";
+  const isAdmin = canViewAll || role === "ADMIN";
+  itemsRef.current = items;
+
+  const todoCount = items.filter((item) => columnForStatus(item.status) === "todo").length;
+  const progressCount = items.filter((item) => columnForStatus(item.status) === "progress").length;
+  const doneCount = items.filter((item) => columnForStatus(item.status) === "done").length;
+  const boardCleared = todoCount === 0 && progressCount === 0 && doneCount > 0;
+  const showDayReportButton = boardCleared && !submittedToday;
 
   useEffect(() => {
     setItems(tasks);
+    itemsRef.current = tasks;
   }, [tasks]);
+
+  useEffect(() => {
+    if (!projectId || !boardCleared) return;
+    let cancelled = false;
+    void (async () => {
+      const existing = await loadOpenDayReportAction(projectId);
+      if (cancelled) return;
+      if (existing?.submittedAt) {
+        setSubmittedToday(true);
+        setDayReport(null);
+        return;
+      }
+      if (existing) {
+        setSubmittedToday(false);
+        setDayReport({ id: existing.id, dueAt: existing.dueAt });
+        return;
+      }
+      const created = await requestDayReportAction(projectId);
+      if (cancelled) return;
+      if (!created) {
+        setSubmittedToday(true);
+        setDayReport(null);
+        return;
+      }
+      setSubmittedToday(false);
+      setDayReport({ id: created.id, dueAt: created.dueAt });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [boardCleared, projectId]);
+
+  useEffect(() => {
+    if (!showDayReportButton) {
+      fallbackDue.current = null;
+      setRemain("");
+      return;
+    }
+    if (!fallbackDue.current) fallbackDue.current = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const deadline = dayReport?.dueAt ?? fallbackDue.current;
+    function tick() {
+      setRemain(remainingLabel(deadline));
+    }
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [dayReport?.dueAt, showDayReportButton]);
 
   const assignees = useMemo(
     () => Array.from(new Set(items.flatMap((task) => task.assigneeNames))).sort(),
@@ -155,24 +248,56 @@ export function PageTaskBoard({
     );
   }
 
+  function openBoardClearedReport(nextItems: ListTask[]) {
+    const todo = nextItems.filter((item) => columnForStatus(item.status) === "todo").length;
+    const progress = nextItems.filter((item) => columnForStatus(item.status) === "progress").length;
+    const done = nextItems.filter((item) => columnForStatus(item.status) === "done").length;
+    if (todo === 0 && progress === 0 && done > 0 && projectId && !submittedToday) {
+      startTransition(async () => {
+        const created = await requestDayReportAction(projectId);
+        if (!created) {
+          setSubmittedToday(true);
+          return;
+        }
+        setSubmittedToday(false);
+        setDayReport({ id: created.id, dueAt: created.dueAt });
+        setReport({ kind: "day_complete", reportId: created.id, dueAt: created.dueAt });
+      });
+    }
+  }
+
+  function openDayReportForm() {
+    if (!projectId) return;
+    startTransition(async () => {
+      const current = dayReport?.id ? dayReport : await requestDayReportAction(projectId);
+      if (!current?.id) {
+        setSubmittedToday(true);
+        return;
+      }
+      setDayReport({ id: current.id, dueAt: current.dueAt });
+      setReport({ kind: "day_complete", reportId: current.id, dueAt: current.dueAt });
+    });
+  }
+
   function placeTask(task: ListTask, columnId: string, beforeId: string | null) {
+    const currentItems = itemsRef.current;
     const nextStatus = statusForColumn(columnId, task.status);
-    const orderedIds = cardsInColumn(columnId, items, task.id).map((item) => item.id);
+    const orderedIds = cardsInColumn(columnId, currentItems, task.id).map((item) => item.id);
     let index = beforeId ? orderedIds.indexOf(beforeId) : orderedIds.length;
     if (index < 0) index = orderedIds.length;
     orderedIds.splice(index, 0, task.id);
 
-    const currentIds = cardsInColumn(columnForStatus(task.status)).map((item) => item.id);
+    const currentIds = cardsInColumn(columnForStatus(task.status), currentItems).map((item) => item.id);
     if (nextStatus === task.status && currentIds.join(",") === orderedIds.join(",")) return;
 
-    setItems((current) =>
-      current.map((item) => {
-        if (item.id === task.id) return { ...item, status: nextStatus, sortOrder: index };
-        const pos = orderedIds.indexOf(item.id);
-        if (pos >= 0) return { ...item, sortOrder: pos };
-        return item;
-      }),
-    );
+    const nextItems = currentItems.map((item) => {
+      if (item.id === task.id) return { ...item, status: nextStatus, sortOrder: index };
+      const pos = orderedIds.indexOf(item.id);
+      if (pos >= 0) return { ...item, sortOrder: pos };
+      return item;
+    });
+    itemsRef.current = nextItems;
+    setItems(nextItems);
 
     const data = new FormData();
     data.set("id", task.id);
@@ -184,6 +309,31 @@ export function PageTaskBoard({
       await reorderPageTasksAction(data);
       router.refresh();
     });
+
+    const prevBusy = currentItems.filter((item) => {
+      const column = columnForStatus(item.status);
+      return column === "todo" || column === "progress";
+    }).length;
+    const nextBusy = nextItems.filter((item) => {
+      const column = columnForStatus(item.status);
+      return column === "todo" || column === "progress";
+    }).length;
+    const nextDone = nextItems.filter((item) => columnForStatus(item.status) === "done").length;
+
+    if (columnId === "done" && columnForStatus(task.status) !== "done") {
+      toast(`${task.taskKey} moved to Done`);
+      if (nextBusy === 0 && nextDone > 0) {
+        openBoardClearedReport(nextItems);
+      } else {
+        setReport({ kind: "task_done", task });
+      }
+      return;
+    }
+    if (nextBusy === 0 && prevBusy > 0 && nextDone > 0) {
+      openBoardClearedReport(nextItems);
+    } else if (nextBusy > 0) {
+      setDayReport(null);
+    }
   }
 
   function moveRank(task: ListTask, direction: -1 | 1, columnCards?: ListTask[]) {
@@ -197,9 +347,16 @@ export function PageTaskBoard({
   }
 
   function slotFromPoint(x: number, y: number, dragTaskId: string) {
-    const column = document.elementFromPoint(x, y)?.closest("[data-board-column]")?.getAttribute("data-board-column");
+    const stack = document.elementsFromPoint(x, y);
+    const columnHit = stack.find((node) => node instanceof Element && node.closest("[data-board-column]"));
+    const column = columnHit instanceof Element ? columnHit.closest("[data-board-column]")?.getAttribute("data-board-column") : null;
     if (!column) return null;
-    const cardNode = document.elementFromPoint(x, y)?.closest("[data-board-card]");
+    const cardHit = stack.find((node) => {
+      if (!(node instanceof Element)) return false;
+      const card = node.closest("[data-board-card]");
+      return Boolean(card && card.getAttribute("data-board-card") !== dragTaskId);
+    });
+    const cardNode = cardHit instanceof Element ? cardHit.closest("[data-board-card]") : null;
     const cardId = cardNode?.getAttribute("data-board-card");
     if (!cardNode || !cardId || cardId === dragTaskId) return { columnId: column, beforeId: null };
     const rect = cardNode.getBoundingClientRect();
@@ -207,57 +364,78 @@ export function PageTaskBoard({
     return { columnId: column, beforeId: nextCardId(cardNode) };
   }
 
+  function finishDrag(clientX: number, clientY: number) {
+    const drag = origin.current;
+    const task = itemsRef.current.find((item) => item.id === drag.id);
+    const wasDragging = drag.dragging;
+    const dropSlot = slotFromPoint(clientX, clientY, drag.id);
+    origin.current = { x: 0, y: 0, dragging: false, id: "", width: 0, pointerId: -1 };
+    setDragId(null);
+    setGhost(null);
+    setOverSlot(null);
+    document.body.style.removeProperty("user-select");
+    document.body.style.removeProperty("cursor");
+    if (!task || !wasDragging) return;
+    suppressClick.current = true;
+    if (dropSlot) placeTask(task, dropSlot.columnId, dropSlot.beforeId);
+  }
+
+  const finishDragRef = useRef(finishDrag);
+  finishDragRef.current = finishDrag;
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>, task: ListTask) {
     if (!canMove(task) || event.button !== 0) return;
     const target = event.target as HTMLElement;
     if (target.closest("a,button")) return;
-    origin.current = { x: event.clientX, y: event.clientY, dragging: false, id: task.id };
+    origin.current = {
+      x: event.clientX,
+      y: event.clientY,
+      dragging: false,
+      id: task.id,
+      width: event.currentTarget.offsetWidth,
+      pointerId: event.pointerId,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>, task: ListTask) {
-    if (origin.current.id !== task.id) return;
-    const dx = event.clientX - origin.current.x;
-    const dy = event.clientY - origin.current.y;
-    if (!origin.current.dragging && Math.hypot(dx, dy) < 8) return;
-    if (!origin.current.dragging) {
-      origin.current.dragging = true;
-      setDragId(task.id);
-      setGhost({ x: event.clientX, y: event.clientY, width: event.currentTarget.offsetWidth });
-    } else {
-      setGhost({ x: event.clientX, y: event.clientY, width: event.currentTarget.offsetWidth });
+  useEffect(() => {
+    function onMove(event: PointerEvent) {
+      const drag = origin.current;
+      if (!drag.id || (drag.pointerId !== -1 && event.pointerId !== drag.pointerId)) return;
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (!drag.dragging && Math.hypot(dx, dy) < 8) return;
+      if (!drag.dragging) {
+        drag.dragging = true;
+        setDragId(drag.id);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "grabbing";
+      }
+      setGhost({ x: event.clientX, y: event.clientY, width: drag.width });
+      setOverSlot(slotFromPoint(event.clientX, event.clientY, drag.id));
     }
-    setOverSlot(slotFromPoint(event.clientX, event.clientY, task.id));
-  }
-
-  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>, task: ListTask) {
-    if (origin.current.id !== task.id) return;
-    const dx = event.clientX - origin.current.x;
-    const dy = event.clientY - origin.current.y;
-    const wasDragging = origin.current.dragging;
-    const dropSlot = slotFromPoint(event.clientX, event.clientY, task.id);
-    origin.current = { x: 0, y: 0, dragging: false, id: "" };
-    setDragId(null);
-    setGhost(null);
-    setOverSlot(null);
-
-    if (wasDragging && dropSlot) {
-      placeTask(task, dropSlot.columnId, dropSlot.beforeId);
-      return;
+    function onUp(event: PointerEvent) {
+      const drag = origin.current;
+      if (!drag.id || (drag.pointerId !== -1 && event.pointerId !== drag.pointerId)) return;
+      finishDragRef.current(event.clientX, event.clientY);
     }
-
-    if (Math.abs(dy) > 56 && Math.abs(dx) < 48) {
-      moveRank(task, dy > 0 ? 1 : -1);
-      return;
+    function onClick(event: MouseEvent) {
+      if (!suppressClick.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClick.current = false;
     }
-
-    if (Math.abs(dx) > 72 && Math.abs(dy) < 56) {
-      const next = neighborColumn(columnForStatus(task.status), dx > 0 ? 1 : -1);
-      if (!next) return;
-      const first = cardsInColumn(next, items, task.id)[0];
-      placeTask(task, next, first?.id ?? null);
-    }
-  }
+    window.addEventListener("pointermove", onMove, { capture: true });
+    window.addEventListener("pointerup", onUp, { capture: true });
+    window.addEventListener("pointercancel", onUp, { capture: true });
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("pointermove", onMove, { capture: true });
+      window.removeEventListener("pointerup", onUp, { capture: true });
+      window.removeEventListener("pointercancel", onUp, { capture: true });
+      window.removeEventListener("click", onClick, true);
+    };
+  }, []);
 
   const dragged = items.find((item) => item.id === dragId);
 
@@ -266,22 +444,25 @@ export function PageTaskBoard({
       {toolbar ?? (
       <div className="flex flex-wrap items-center gap-2 px-1 py-3">
         <label className="relative w-[220px]">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#626f86]" />
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#64748B]" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search board"
-            className="w-full rounded-full border border-[#dcdfe4] bg-white py-1.5 pl-9 pr-3 text-sm text-[#172b4d]"
+            className="w-full rounded-full border border-[#E2E8F0] bg-white py-1.5 pl-9 pr-3 text-sm text-[#172033]"
           />
         </label>
         <label className="relative">
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#dcdfe4] bg-white px-3 py-1.5 text-sm text-[#44546f]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#64748B]">
             {kind === "all" ? "Request type" : pageTaskKindLabel(kind)}
             <ChevronDown size={14} />
           </span>
           <select value={kind} onChange={(event) => setKind(event.target.value)} className="absolute inset-0 cursor-pointer opacity-0">
             <option value="all">Request type</option>
-            {PAGE_TASK_KINDS.map((value) => (
+            {kindsForFilter(
+              workType,
+              tasks.map((task) => task.kind),
+            ).map((value) => (
               <option key={value} value={value}>
                 {pageTaskKindLabel(value)}
               </option>
@@ -289,7 +470,7 @@ export function PageTaskBoard({
           </select>
         </label>
         <label className="relative">
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#dcdfe4] bg-white px-3 py-1.5 text-sm text-[#44546f]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#64748B]">
             {assignee === "all" ? "Assignee" : assignee === "unassigned" ? "Unassigned" : assignee}
             <ChevronDown size={14} />
           </span>
@@ -304,7 +485,7 @@ export function PageTaskBoard({
           </select>
         </label>
         <label className="relative">
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#dcdfe4] bg-white px-3 py-1.5 text-sm text-[#44546f]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#64748B]">
             {page === "all" ? "Page" : page}
             <ChevronDown size={14} />
           </span>
@@ -318,7 +499,7 @@ export function PageTaskBoard({
           </select>
         </label>
         <label className="relative">
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#dcdfe4] bg-white px-3 py-1.5 text-sm text-[#44546f]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#64748B]">
             Group: {group === "none" ? "None" : group}
             <ChevronDown size={14} />
           </span>
@@ -329,15 +510,25 @@ export function PageTaskBoard({
             <option value="page">Page</option>
           </select>
         </label>
-        <p className="ml-auto text-xs text-[#626f86]">
-          {visible.length} work items · drag up/down to reorder, sideways to change status
+        <p className="ml-auto text-xs text-[#64748B]">
+          {visible.length} work items · drag to another column to change status
         </p>
+        {isAdmin && projectId ? (
+          <button
+            type="button"
+            onClick={() => setLogsOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-[3px] border border-[#E2E8F0] bg-white px-2.5 py-1.5 text-xs font-medium text-[#172033] hover:bg-[#F8FAFC]"
+          >
+            <ScrollText size={14} />
+            Logs
+          </button>
+        ) : null}
       </div>
       )}
       {toolbar ? (
         <div className="flex items-center justify-between gap-2 px-4 pb-2">
           <label className="relative">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#dcdfe4] bg-white px-3 py-1.5 text-sm text-[#44546f]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#64748B]">
               Group: {group === "none" ? "None" : group}
               <ChevronDown size={14} />
             </span>
@@ -348,9 +539,19 @@ export function PageTaskBoard({
               <option value="page">Page</option>
             </select>
           </label>
-          <p className="text-xs text-[#626f86]">
-            {visible.length} work items · drag up/down to reorder, sideways to change status
+          <p className="text-xs text-[#64748B]">
+            {visible.length} work items · drag to another column to change status
           </p>
+          {isAdmin && projectId ? (
+            <button
+              type="button"
+              onClick={() => setLogsOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-[3px] border border-[#E2E8F0] bg-white px-2.5 py-1.5 text-xs font-medium text-[#172033] hover:bg-[#F8FAFC]"
+            >
+              <ScrollText size={14} />
+              Logs
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -358,9 +559,9 @@ export function PageTaskBoard({
         {lanes.map((lane) => (
           <section key={lane.id} className="mb-4 last:mb-0">
             {lane.title ? (
-              <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-wide text-[#626f86]">{lane.title}</h3>
+              <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-wide text-[#64748B]">{lane.title}</h3>
             ) : null}
-            <div className="grid min-w-[1180px] grid-cols-4 gap-3">
+            <div className="grid min-w-[960px] grid-cols-3 gap-3">
               {BOARD_COLUMNS.map((column) => {
                 const cards = sortBoardTasks(lane.tasks.filter((task) => columnForStatus(task.status) === column.id));
                 const active = overSlot?.columnId === column.id;
@@ -368,17 +569,17 @@ export function PageTaskBoard({
                   <div
                     key={`${lane.id}-${column.id}`}
                     data-board-column={column.id}
-                    className={`flex min-h-[280px] flex-col rounded-[8px] bg-[#f1f2f4] p-2 ${
-                      active ? "ring-2 ring-[#0c66e4]" : ""
+                    className={`flex min-h-[420px] flex-col rounded-[3px] bg-[#F1F5F9] p-2 ${
+                      active ? "ring-2 ring-[#2563EB]" : ""
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2 px-2 py-2">
-                      <p className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[#626f86]">
+                      <p className="text-[11px] font-bold uppercase leading-tight tracking-wide text-[#64748B]">
                         {column.title}
                       </p>
-                      <span className="rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#44546f]">{cards.length}</span>
+                      <span className="rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#64748B]">{cards.length}</span>
                     </div>
-                    <div className="flex flex-1 flex-col gap-2">
+                    <div className="flex min-h-0 flex-1 flex-col gap-2">
                       {cards.map((task, index) => {
                         const moving = dragId === task.id;
                         const showLine = active && overSlot?.beforeId === task.id;
@@ -388,22 +589,22 @@ export function PageTaskBoard({
                           <div
                             data-board-card={task.id}
                             onPointerDown={(event) => onPointerDown(event, task)}
-                            onPointerMove={(event) => onPointerMove(event, task)}
-                            onPointerUp={(event) => onPointerUp(event, task)}
                             onPointerCancel={() => {
-                              origin.current = { x: 0, y: 0, dragging: false, id: "" };
+                              origin.current = { x: 0, y: 0, dragging: false, id: "", width: 0, pointerId: -1 };
                               setDragId(null);
                               setGhost(null);
                               setOverSlot(null);
+                              document.body.style.removeProperty("user-select");
+                              document.body.style.removeProperty("cursor");
                             }}
-                            className={`rounded-[3px] border border-[#dcdfe4] bg-white p-3 shadow-[0_1px_1px_#091e4240] ${
+                            className={`rounded-[3px] border border-[#E2E8F0] bg-white p-3 shadow-[0_1px_1px_#091e4240] ${
                               canMove(task) ? "cursor-grab touch-none active:cursor-grabbing" : ""
-                            } ${moving ? "pointer-events-none opacity-30" : "hover:bg-[#fafbfc]"}`}
+                            } ${moving ? "pointer-events-none opacity-30" : "hover:bg-[#F8FAFC]"}`}
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex min-w-0 items-start gap-2">
-                                <span className="mt-0.5 w-5 shrink-0 text-[12px] font-bold tabular-nums text-[#626f86]">{index + 1}</span>
-                                <Link href={task.href} className="text-sm font-semibold text-[#172b4d] hover:text-[#0c66e4]">
+                                <span className="mt-0.5 w-5 shrink-0 text-[12px] font-bold tabular-nums text-[#64748B]">{index + 1}</span>
+                                <Link href={task.href} className="text-sm font-semibold text-[#172033] hover:text-[#2563EB]">
                                   {task.title}
                                 </Link>
                               </div>
@@ -413,7 +614,7 @@ export function PageTaskBoard({
                                     type="button"
                                     disabled={pending || index === 0}
                                     onClick={() => moveRank(task, -1, cards)}
-                                    className="rounded p-0.5 text-[#626f86] hover:bg-[#f1f2f4] disabled:opacity-30"
+                                    className="rounded p-0.5 text-[#64748B] hover:bg-[#F1F5F9] disabled:opacity-30"
                                     aria-label="Move up"
                                   >
                                     <ChevronUp size={14} />
@@ -422,7 +623,7 @@ export function PageTaskBoard({
                                     type="button"
                                     disabled={pending || index === cards.length - 1}
                                     onClick={() => moveRank(task, 1, cards)}
-                                    className="rounded p-0.5 text-[#626f86] hover:bg-[#f1f2f4] disabled:opacity-30"
+                                    className="rounded p-0.5 text-[#64748B] hover:bg-[#F1F5F9] disabled:opacity-30"
                                     aria-label="Move down"
                                   >
                                     <ChevronDown size={14} />
@@ -436,7 +637,7 @@ export function PageTaskBoard({
                                       const first = cardsInColumn(next, items, task.id)[0];
                                       placeTask(task, next, first?.id ?? null);
                                     }}
-                                    className="rounded p-0.5 text-[#626f86] hover:bg-[#f1f2f4] disabled:opacity-30"
+                                    className="rounded p-0.5 text-[#64748B] hover:bg-[#F1F5F9] disabled:opacity-30"
                                     aria-label="Move left"
                                   >
                                     <ChevronLeft size={14} />
@@ -450,7 +651,7 @@ export function PageTaskBoard({
                                       const first = cardsInColumn(next, items, task.id)[0];
                                       placeTask(task, next, first?.id ?? null);
                                     }}
-                                    className="rounded p-0.5 text-[#626f86] hover:bg-[#f1f2f4] disabled:opacity-30"
+                                    className="rounded p-0.5 text-[#64748B] hover:bg-[#F1F5F9] disabled:opacity-30"
                                     aria-label="Move right"
                                   >
                                     <ChevronRight size={14} />
@@ -465,14 +666,14 @@ export function PageTaskBoard({
                             >
                               {pageTaskStatusLabel(task.status)}
                             </span>
-                            <p className={`mt-2 inline-flex items-center gap-1 text-xs ${dueSoon(task) ? "text-[#ae2e24]" : "text-[#626f86]"}`}>
+                            <p className={`mt-2 inline-flex items-center gap-1 text-xs ${dueSoon(task) ? "text-[#DC2626]" : "text-[#64748B]"}`}>
                               <Clock3 size={12} />
                               {dueLabel(task)}
                             </p>
-                            <div className="mt-3 flex items-center justify-between text-[#626f86]">
+                            <div className="mt-3 flex items-center justify-between text-[#64748B]">
                               <div className="flex items-center gap-2">
-                                <LayoutGrid size={13} className="text-[#44546f]" />
-                                <Link href={task.href} className="text-[12px] font-medium text-[#626f86] hover:text-[#0c66e4]">
+                                <LayoutGrid size={13} className="text-[#64748B]" />
+                                <Link href={task.href} className="text-[12px] font-medium text-[#64748B] hover:text-[#2563EB]">
                                   {task.taskKey}
                                 </Link>
                               </div>
@@ -487,14 +688,14 @@ export function PageTaskBoard({
                                     {task.assigneeNames.slice(0, 3).map((name) => (
                                       <span
                                         key={name}
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[9px] font-semibold text-[#44546f] ring-2 ring-white"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[9px] font-semibold text-[#64748B] ring-2 ring-white"
                                       >
                                         {initials(name)}
                                       </span>
                                     ))}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#dcdfe4] text-[#44546f]">
+                                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E2E8F0] text-[#64748B]">
                                     <UserRound size={11} />
                                   </span>
                                 )}
@@ -505,10 +706,26 @@ export function PageTaskBoard({
                         );
                       })}
                       {active && overSlot?.beforeId === null ? <DropLine /> : null}
-                      {cards.length === 0 && !active ? (
-                        <p className="px-2 py-8 text-center text-xs text-[#8993a4]">
-                          No work items
+                      {cards.length === 0 ? (
+                        <p className="flex flex-1 items-center justify-center px-2 py-10 text-center text-xs text-[#94A3B8]">
+                          {active ? "Drop here" : "No work items"}
                         </p>
+                      ) : null}
+                      {column.id === "done" && showDayReportButton ? (
+                        <button
+                          type="button"
+                          onClick={openDayReportForm}
+                          className="mt-auto flex w-full items-center justify-between gap-2 rounded-[3px] border border-[#FDE68A] bg-[#FFFBEB] px-3 py-2.5 text-left shadow-[0_1px_1px_#091e4240] hover:bg-[#FEF3C7]"
+                        >
+                          <span className="inline-flex min-w-0 items-center gap-2">
+                            <FileText size={15} className="shrink-0 text-[#D97706]" />
+                            <span className="text-sm font-semibold text-[#92400E]">Add today&apos;s report</span>
+                          </span>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-[3px] bg-white px-2 py-0.5 text-[12px] font-semibold tabular-nums text-[#D97706]">
+                            <Clock3 size={12} />
+                            {remain || "15:00 left"}
+                          </span>
+                        </button>
                       ) : null}
                     </div>
                   </div>
@@ -521,17 +738,37 @@ export function PageTaskBoard({
 
       {dragged && ghost ? (
         <div
-          className="pointer-events-none fixed z-[70] rounded-[3px] border border-[#0c66e4] bg-white p-3 shadow-[0_8px_16px_#091e4226]"
+          className="pointer-events-none fixed z-[70] rounded-[3px] border border-[#2563EB] bg-white p-3 shadow-[0_8px_16px_#091e4226]"
           style={{
             left: ghost.x - ghost.width / 2,
             top: ghost.y - 24,
             width: ghost.width,
           }}
         >
-          <p className="text-sm font-semibold text-[#172b4d]">{dragged.title}</p>
-          <p className="mt-1 text-xs text-[#626f86]">{dragged.taskKey}</p>
+          <p className="text-sm font-semibold text-[#172033]">{dragged.title}</p>
+          <p className="mt-1 text-xs text-[#64748B]">{dragged.taskKey}</p>
         </div>
       ) : null}
+
+      <WorkReportDialog
+        open={Boolean(report)}
+        kind={report?.kind ?? "task_done"}
+        projectId={projectId}
+        pageId={pageId}
+        taskId={report?.task?.id}
+        taskKey={report?.task?.taskKey}
+        taskTitle={report?.task?.title}
+        reportId={report?.reportId}
+        dueAt={report?.dueAt}
+        onSubmitted={() => {
+          if (report?.kind === "day_complete") {
+            setDayReport(null);
+            setSubmittedToday(true);
+          }
+        }}
+        onClose={() => setReport(null)}
+      />
+      {isAdmin ? <BoardLogsPanel projectId={projectId} open={logsOpen} onClose={() => setLogsOpen(false)} /> : null}
     </div>
   );
 }

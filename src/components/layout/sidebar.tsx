@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import {
-  ClipboardCheck,
+  BarChart3,
   FolderKanban,
   LayoutDashboard,
   PanelLeftClose,
@@ -12,11 +12,12 @@ import {
   Users,
 } from "lucide-react";
 import type { Role } from "@/lib/types";
+import type { AccessKey } from "@/lib/access";
 
-const links = [
-  { href: "/", label: "My Work", icon: ClipboardCheck, roles: ["ADMIN", "TESTER", "FIXER"] },
-  { href: "/projects", label: "Projects", icon: FolderKanban, roles: ["ADMIN", "TESTER", "FIXER"] },
-  { href: "/team", label: "Team", icon: Users, roles: ["ADMIN"] },
+const links: { href: string; label: string; icon: typeof BarChart3; access: AccessKey }[] = [
+  { href: "/", label: "Dashboard", icon: BarChart3, access: "dashboard" },
+  { href: "/projects", label: "Projects", icon: FolderKanban, access: "projects" },
+  { href: "/team", label: "Team", icon: Users, access: "team" },
 ];
 
 function Tip({
@@ -32,16 +33,16 @@ function Tip({
   return (
     <span className="group relative flex justify-center">
       {children}
-      <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-[#172b4d] px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block">
+      <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-50 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-[#172554] px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block">
         {label}
       </span>
     </span>
   );
 }
 
-export function Sidebar({ role }: { role: Role }) {
+export function Sidebar({ role: _role, access }: { role: Role; access: AccessKey[] }) {
   const pathname = usePathname();
-  const visible = links.filter((link) => link.roles.includes(role));
+  const visible = links.filter((link) => access.includes(link.access));
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const start = useRef({ x: 0, y: 0, active: false });
@@ -100,24 +101,24 @@ export function Sidebar({ role }: { role: Role }) {
       <aside
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
-        className={`relative z-40 flex h-full shrink-0 flex-col bg-[#1d2856] text-white transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${
+        className={`relative z-40 flex h-full shrink-0 flex-col bg-[#172554] text-white transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] ${
           rail ? "w-[72px]" : "w-[248px]"
-        } ${mobileOpen ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:shadow-[8px_0_24px_#091e4240]" : ""}`}
+        } ${mobileOpen ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:shadow-[8px_0_24px_rgba(23,37,84,.35)]" : ""}`}
       >
         <div className={`flex items-center py-4 ${showLabels ? "justify-between px-4" : "justify-center px-2"}`}>
           {showLabels ? (
             <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0c66e4] text-white">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[3px] bg-[#2563EB] text-white">
                 <LayoutDashboard size={18} />
               </span>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">QA Tracker</p>
-                <p className="truncate text-[11px] text-white/60">Own InfoTech</p>
+                <p className="truncate text-sm font-semibold text-white">QA Tracker</p>
+                <p className="truncate text-[11px] text-[#CBD5E1]">Own InfoTech</p>
               </div>
             </div>
           ) : (
             <Tip collapsed label="QA Tracker">
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0c66e4]">
+              <span className="flex h-9 w-9 items-center justify-center rounded-[3px] bg-[#2563EB]">
                 <LayoutDashboard size={18} />
               </span>
             </Tip>
@@ -137,8 +138,8 @@ export function Sidebar({ role }: { role: Role }) {
             }}
             className={
               showLabels
-                ? "rounded-md p-1.5 text-white/80 hover:bg-white/10"
-                : "absolute right-[-14px] top-5 z-50 flex h-8 w-8 items-center justify-center rounded-md border border-[#dcdfe4] bg-white text-[#172b4d] shadow-sm hover:bg-[#f1f2f4]"
+                ? "rounded-[3px] p-1.5 text-[#CBD5E1] hover:bg-white/10 hover:text-white"
+                : "absolute right-[-14px] top-5 z-50 flex h-8 w-8 items-center justify-center rounded-[3px] border border-[#E2E8F0] bg-white text-[#172033] shadow-sm hover:bg-[#F8FAFC]"
             }
             title={rail ? "Show sidebar" : "Hide sidebar"}
             aria-label={rail ? "Show sidebar" : "Hide sidebar"}
@@ -156,8 +157,10 @@ export function Sidebar({ role }: { role: Role }) {
                 <Link
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
-                  className={`flex items-center rounded-lg text-sm transition-colors ${
-                    active ? "bg-white/15 font-medium text-white" : "text-white/75 hover:bg-white/10 hover:text-white"
+                  className={`flex items-center rounded-[3px] text-sm transition-colors ${
+                    active
+                      ? "bg-[#334E9B] font-medium text-white"
+                      : "text-[#CBD5E1] hover:bg-white/10 hover:text-white"
                   } ${showLabels ? "gap-3 px-3 py-2.5" : "h-11 w-full justify-center"}`}
                 >
                   <Icon size={18} />

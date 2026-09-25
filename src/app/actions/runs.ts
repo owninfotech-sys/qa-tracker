@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { canManage, requireSession } from "@/lib/auth";
+import { canManageRuns, requireSession } from "@/lib/auth";
 import {
   assignRunItems,
   closeTestRun,
@@ -15,7 +15,7 @@ import {
 
 export async function createRunAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) redirect("/");
+  if (!(await canManageRuns(session.role))) redirect("/");
 
   const projectId = String(formData.get("projectId") || "");
   const name = String(formData.get("name") || "").trim();
@@ -52,7 +52,7 @@ export async function createRunAction(formData: FormData) {
 
 export async function assignItemsAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManageRuns(session.role))) return;
 
   const runId = String(formData.get("runId") || "");
   const assigneeId = String(formData.get("assigneeId") || "");
@@ -76,7 +76,7 @@ export async function assignItemsAction(formData: FormData) {
 
 export async function closeRunAction(formData: FormData) {
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!(await canManageRuns(session.role))) return;
 
   const runId = String(formData.get("runId") || "");
   const reason = String(formData.get("reason") || "").trim();

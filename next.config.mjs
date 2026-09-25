@@ -6,6 +6,14 @@ const nextConfig = {
       bodySizeLimit: "12mb",
     },
   },
+  async headers() {
+    return [
+      {
+        source: "/((?!_next/static|_next/image|favicon.ico|favicon.png|icon.png|apple-icon.png).*)",
+        headers: [{ key: "Cache-Control", value: "private, no-cache, no-store, max-age=0, must-revalidate" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

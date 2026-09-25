@@ -18,7 +18,7 @@ export function ProjectLinksForm({
           name="url"
           defaultValue={url ?? ""}
           placeholder="https://example.com"
-          className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3 py-2.5 text-sm transition focus:bg-white"
+          className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3 py-2.5 text-sm transition focus:bg-white"
         />
       </label>
       <label className="block">
@@ -27,10 +27,10 @@ export function ProjectLinksForm({
           name="rsvpUrl"
           defaultValue={rsvpUrl ?? ""}
           placeholder="https://example.com/rsvp"
-          className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3 py-2.5 text-sm transition focus:bg-white"
+          className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3 py-2.5 text-sm transition focus:bg-white"
         />
       </label>
-      <button className="rounded-lg border border-line px-3 py-2 text-sm font-medium hover:bg-[#f1f3f4]">
+      <button className="rounded-lg border border-line px-3 py-2 text-sm font-medium hover:bg-[#F1F5F9]">
         Save links
       </button>
     </form>

@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
-import { canAddCases, canEditContent, requireSession } from "@/lib/auth";
+import { hasAccess, requireSession } from "@/lib/auth";
 import { findPageTasksForBoard, findProjectWorkQueue, findUsers } from "@/lib/data";
 import { parseAssigneeIds, taskKey } from "@/lib/task-key";
 import { loadSortOrders } from "@/lib/task-order";
 import { PageTaskList } from "@/components/projects/page-task-list";
 import { WorkQueueHeader } from "@/components/projects/work-queue-header";
 import { WorkQueueSidebar } from "@/components/projects/work-queue-sidebar";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function PageTaskDashboard({
   params,
@@ -17,8 +18,10 @@ export default async function PageTaskDashboard({
   const user = await requireSession();
   const { id, pageId } = await params;
   const { error, add, queue, view } = await searchParams;
-  const canCreate = canAddCases(user.role);
-  const canEdit = canEditContent(user.role);
+  const canCreate = await hasAccess(user.role, "createTask");
+  const canEdit = await hasAccess(user.role, "manageTask");
+  const showTesting = await hasAccess(user.role, "testing");
+  const canViewAll = await hasAccess(user.role, "viewAll");
 
   const project = await findProjectWorkQueue(id);
   if (!project) notFound();
@@ -33,36 +36,21 @@ export default async function PageTaskDashboard({
       (sortOrders.get(a.id) ?? 0) - (sortOrders.get(b.id) ?? 0) || b.createdAt.getTime() - a.createdAt.getTime(),
   );
 
-  const fixerIds = new Set(
-    (await findUsers({ role: "FIXER", active: true })).map((item) => item.id),
-  );
-
-  const isFixerTask = (task: (typeof allTasks)[number]) => {
-    const ids = parseAssigneeIds(task.assigneeIds, task.assigneeId);
-    if (!ids.length) return false;
-    if (user.role === "FIXER") return ids.includes(user.id);
-    return ids.some((id) => fixerIds.has(id));
-  };
+  const isUnassigned = (task: (typeof allTasks)[number]) =>
+    parseAssigneeIds(task.assigneeIds, task.assigneeId).length === 0;
 
   const filtered = allTasks.filter((task) => {
     if (queue === "open") {
-      return (
-        task.status === "open" ||
-        task.status === "in_progress" ||
-        task.status === "ready_for_testing" ||
-        task.status === "waiting_customer" ||
-        task.status === "escalated" ||
-        task.status === "pending"
-      );
+      return task.status !== "done" && task.status !== "wont_do";
     }
-    if (queue === "unassigned") return true;
-    if (queue === "fixer") return isFixerTask(task);
+    if (queue === "unassigned") return isUnassigned(task);
     return task.pageId === page.id;
   });
 
-  const people = (await findUsers({ active: true, orderBy: "name" })).map((person) => ({
+  const people = (await findUsers({ active: true, orderBy: "createdAt" })).map((person) => ({
     id: person.id,
     name: person.name,
+    role: person.role,
   }));
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
 
@@ -73,7 +61,7 @@ export default async function PageTaskDashboard({
       .filter((name): name is string => Boolean(name));
     return {
       id: task.id,
-      taskKey: taskKey(task.id),
+      taskKey: task.taskKey || taskKey(task.id, project.code, task.number),
       projectId: task.projectId,
       pageId: task.pageId,
       pageName: task.page.name,
@@ -101,18 +89,16 @@ export default async function PageTaskDashboard({
   const openCount = allTasks.filter(
     (task) => task.status !== "done" && task.status !== "wont_do",
   ).length;
-  const fixerCount = allTasks.filter(isFixerTask).length;
+  const unassignedCount = allTasks.filter(isUnassigned).length;
   const title =
     queue === "open"
       ? "All open"
       : queue === "unassigned"
-        ? "Unassigned work items"
-        : queue === "fixer"
-          ? "Fixer Tasks"
-          : page.name;
+        ? "Unassigned"
+        : page.name;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f7f8f9] text-[#172b4d]">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#F8FAFC] text-[#172033]">
       <WorkQueueHeader
         userName={user.name}
         canEdit={canCreate}
@@ -123,26 +109,27 @@ export default async function PageTaskDashboard({
         people={people}
         error={error}
         defaultOpen={canCreate && (add === "1" || Boolean(error))}
+        workType="tasks"
+        showTesting={showTesting}
       />
 
       <div className="relative flex min-h-0 flex-1">
         <WorkQueueSidebar
           projectId={project.id}
           projectName={project.name}
+          projectCode={project.code}
           pageId={page.id}
           pages={project.pages.map((item) => ({ id: item.id, name: item.name, count: item.tasks.length }))}
           queue={queue}
           view={view}
           openCount={openCount}
-          totalCount={allTasks.length}
-          fixerCount={fixerCount}
+          totalCount={unassignedCount}
+          canReorder={canEdit}
         />
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white px-4 pt-5 sm:px-6 sm:pt-6">
-          <p className="text-xs text-[#626f86]">
-            Projects / {project.name} / Queues
-          </p>
-          <h1 className="mt-2 text-[24px] font-semibold tracking-tight text-[#172b4d]">{title}</h1>
+          <BackLink href={`/projects/${project.id}`} label={project.name} />
+          <h1 className="mt-2 text-[24px] font-semibold tracking-tight text-[#172033]">{title}</h1>
           <div className="mt-5 flex min-h-0 flex-1 flex-col pb-0">
             <PageTaskList
               tasks={tasks}
@@ -153,6 +140,10 @@ export default async function PageTaskDashboard({
               view={view === "board" ? "board" : "list"}
               basePath={`/projects/${project.id}/pages/${page.id}`}
               queue={queue}
+              workType="tasks"
+              projectId={project.id}
+              pageId={page.id}
+              canViewAll={canViewAll}
             />
           </div>
         </main>

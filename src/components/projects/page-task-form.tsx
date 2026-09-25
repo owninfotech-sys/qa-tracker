@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Bug, LayoutGrid, Paintbrush, Sparkles } from "lucide-react";
+import { AlertTriangle, Bug, ClipboardList, LayoutGrid, Paintbrush, Sparkles } from "lucide-react";
 import { createPageTaskAction } from "@/app/actions/page-tasks";
 import { PAGE_TASK_KINDS, type PageTaskKind } from "@/lib/types";
 import { pageTaskKindLabel } from "@/lib/format";
 
 const kindMeta: Record<PageTaskKind, { hint: string; icon: typeof AlertTriangle }> = {
+  task: { hint: "Work to assign and complete", icon: ClipboardList },
   issue: { hint: "Broken, missing, or incorrect behavior", icon: AlertTriangle },
   refine: { hint: "Copy, spacing, and small polish", icon: Sparkles },
   redesign: { hint: "Layout or flow needs a new approach", icon: Paintbrush },
@@ -45,7 +46,7 @@ export function PageTaskForm({
                 type="button"
                 onClick={() => setKind(value)}
                 className={`rounded-xl border p-3 text-left transition ${
-                  active ? "border-blue bg-blue-soft shadow-sm" : "border-line bg-[#f8f9fa] hover:border-blue/40"
+                  active ? "border-blue bg-blue-soft shadow-sm" : "border-line bg-[#F8FAFC] hover:border-blue/40"
                 }`}
               >
                 <Icon size={16} className={active ? "text-blue" : "text-muted"} />
@@ -62,7 +63,7 @@ export function PageTaskForm({
         <input
           name="title"
           required
-          className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3.5 py-2.5 text-sm transition focus:bg-white"
+          className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5 text-sm transition focus:bg-white"
           placeholder="What needs work on this page?"
         />
       </label>
@@ -72,7 +73,7 @@ export function PageTaskForm({
         <textarea
           name="details"
           rows={3}
-          className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3.5 py-2.5 text-sm transition focus:bg-white"
+          className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3.5 py-2.5 text-sm transition focus:bg-white"
           placeholder="Steps, expected result, or design notes"
         />
       </label>
@@ -80,7 +81,7 @@ export function PageTaskForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">Priority</span>
-          <select name="priority" defaultValue="P2" className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3 py-2.5 text-sm">
+          <select name="priority" defaultValue="P2" className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3 py-2.5 text-sm">
             <option value="P0">P0 Critical</option>
             <option value="P1">P1 High</option>
             <option value="P2">P2 Medium</option>
@@ -89,14 +90,10 @@ export function PageTaskForm({
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink">Status</span>
-          <select name="status" defaultValue="open" className="w-full rounded-xl border border-line bg-[#f8f9fa] px-3 py-2.5 text-sm">
-            <option value="open">Waiting for support</option>
-            <option value="waiting_customer">Waiting for customer</option>
-            <option value="in_progress">In Progress</option>
-            <option value="escalated">Escalated</option>
-            <option value="pending">Pending</option>
-            <option value="ready_for_testing">Fixed ready for testing</option>
-            <option value="done">Resolved</option>
+          <select name="status" defaultValue="open" className="w-full rounded-xl border border-line bg-[#F8FAFC] px-3 py-2.5 text-sm">
+            <option value="open">To do</option>
+            <option value="in_progress">In progress</option>
+            <option value="done">Done</option>
             <option value="wont_do">Canceled</option>
           </select>
         </label>

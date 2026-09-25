@@ -12,6 +12,7 @@ export function PageTaskDialog({
   people = [],
   error,
   defaultOpen = false,
+  workType,
 }: {
   projectId: string;
   projectName?: string;
@@ -20,6 +21,7 @@ export function PageTaskDialog({
   people?: CreatePerson[];
   error?: string;
   defaultOpen?: boolean;
+  workType?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -28,10 +30,10 @@ export function PageTaskDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-[3px] bg-[#0c66e4] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#0055cc]"
+        className="inline-flex items-center gap-1 rounded-[3px] bg-[#2563EB] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1D4ED8]"
       >
         <Plus size={16} />
-        Create
+        {workType === "issues" ? "Create issue" : "Create task"}
       </button>
 
       <CreateWorkItemModal
@@ -43,6 +45,7 @@ export function PageTaskDialog({
         pageName={pageName}
         people={people}
         error={error}
+        workType={workType}
       />
     </>
   );

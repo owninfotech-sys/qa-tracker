@@ -1,4 +1,26 @@
-export function taskKey(id: string) {
+export function projectCodeFromName(name: string) {
+  const words = name
+    .trim()
+    .split(/[\s/_-]+/)
+    .filter(Boolean);
+  let code = "";
+  if (words.length >= 2) {
+    code = `${words[0][0] ?? ""}${words[1][0] ?? ""}`;
+  } else {
+    code = (words[0] || "PRJ").replace(/[^a-zA-Z0-9]/g, "").slice(0, 3);
+  }
+  code = code.toUpperCase();
+  if (code.length < 2) code = `P${code}`.slice(0, 3).padEnd(2, "X");
+  return code.slice(0, 8);
+}
+
+export function formatTaskKey(projectCode: string, number: number) {
+  const code = (projectCode || "PRJ").toUpperCase();
+  return `${code}-${number}`;
+}
+
+export function taskKey(id: string, projectCode?: string | null, number?: number | null) {
+  if (projectCode && number) return formatTaskKey(projectCode, number);
   return `T-${id.slice(-4).toUpperCase()}`;
 }
 

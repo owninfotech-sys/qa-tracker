@@ -1,23 +1,29 @@
 @import "tailwindcss";
 
 :root {
-  --blue: #1a73e8;
-  --blue-hover: #1558c0;
-  --blue-soft: #e8f0fe;
-  --blue-ink: #174ea6;
-  --black: #202124;
-  --muted: #5f6368;
-  --line: #dadce0;
-  --bg: #f8f9fa;
+  --navy: #172554;
+  --navy-active: #334e9b;
+  --sidebar-text: #cbd5e1;
+  --blue: #2563eb;
+  --blue-hover: #1d4ed8;
+  --blue-soft: #eff6ff;
+  --blue-ink: #1d4ed8;
+  --cyan: #0284c7;
+  --cyan-soft: #ecfeff;
+  --black: #172033;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --bg: #f8fafc;
   --white: #ffffff;
-  --danger: #d93025;
-  --danger-soft: #fce8e6;
-  --success: #188038;
-  --success-soft: #e6f4ea;
-  --warning: #e37400;
-  --warning-soft: #fef7e0;
-  --purple: #8430ce;
-  --purple-soft: #f3e8fd;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --success: #16a34a;
+  --success-soft: #dcfce7;
+  --warning: #d97706;
+  --warning-soft: #fef3c7;
+  --purple: #7c3aed;
+  --purple-soft: #f5f3ff;
+  --info: #0284c7;
 }
 
 @theme inline {
@@ -25,6 +31,8 @@
   --color-blue-hover: var(--blue-hover);
   --color-blue-soft: var(--blue-soft);
   --color-blue-ink: var(--blue-ink);
+  --color-cyan: var(--cyan);
+  --color-cyan-soft: var(--cyan-soft);
   --color-ink: var(--black);
   --color-muted: var(--muted);
   --color-line: var(--line);
@@ -38,6 +46,10 @@
   --color-warning-soft: var(--warning-soft);
   --color-purple: var(--purple);
   --color-purple-soft: var(--purple-soft);
+  --color-info: var(--info);
+  --color-navy: var(--navy);
+  --color-navy-active: var(--navy-active);
+  --color-sidebar-text: var(--sidebar-text);
   --font-sans: var(--font-inter);
 }
 
@@ -49,7 +61,7 @@ body {
 body {
   background: var(--bg);
   color: var(--black);
-  font-family: var(--font-inter), "Google Sans", system-ui, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -57,7 +69,7 @@ body {
 }
 
 ::selection {
-  background: #d2e3fc;
+  background: #dbeafe;
   color: var(--black);
 }
 
@@ -71,5 +83,5 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.16);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.16);
 }

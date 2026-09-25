@@ -47,3 +47,22 @@ export async function saveTaskUploads(taskId: string, files: File[]) {
   return saved;
 }
 
+export async function saveUserLogo(userId: string, file: File) {
+  const name = file.name.toLowerCase();
+  const allowed =
+    IMAGE_TYPES.has(file.type) || /\.(png|jpe?g|gif|webp)$/i.test(name);
+  if (!allowed || file.size <= 0 || file.size > 2 * 1024 * 1024) return null;
+  const ext = name.endsWith(".webp")
+    ? "webp"
+    : name.endsWith(".gif")
+      ? "gif"
+      : name.endsWith(".png")
+        ? "png"
+        : "jpg";
+  const dir = path.join(process.cwd(), "public", "uploads", "users", userId);
+  await mkdir(dir, { recursive: true });
+  const diskName = `logo-${Date.now()}.${ext}`;
+  await writeFile(path.join(dir, diskName), Buffer.from(await file.arrayBuffer()));
+  return `/uploads/users/${userId}/${diskName}`;
+}
+

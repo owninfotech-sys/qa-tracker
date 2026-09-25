@@ -29,6 +29,7 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  logo?: string | null;
 };
 
 export type TestResult =
@@ -47,7 +48,7 @@ export type FixStatus =
   | "closed"
   | "wont_fix";
 
-export const PAGE_TASK_KINDS = ["issue", "refine", "redesign", "fix_bug", "fix_ui"] as const;
+export const PAGE_TASK_KINDS = ["task", "issue", "refine", "redesign", "fix_bug", "fix_ui"] as const;
 export type PageTaskKind = (typeof PAGE_TASK_KINDS)[number];
 
 export const PAGE_TASK_STATUSES = [
@@ -61,6 +62,8 @@ export const PAGE_TASK_STATUSES = [
   "wont_do",
 ] as const;
 export type PageTaskStatus = (typeof PAGE_TASK_STATUSES)[number];
+
+export const TASK_STATUSES = ["open", "in_progress", "done", "wont_do"] as const;
 
 export function isPageTaskKind(value: string): value is PageTaskKind {
   return (PAGE_TASK_KINDS as readonly string[]).includes(value);

@@ -2,7 +2,7 @@
 
 import { deletePageTaskAction, updatePageTaskAction } from "@/app/actions/page-tasks";
 import { PriorityBadge } from "@/components/ui/status-badge";
-import { PAGE_TASK_STATUSES } from "@/lib/types";
+import { TASK_STATUSES } from "@/lib/types";
 import { pageTaskStatusLabel } from "@/lib/format";
 
 export function PageTaskCard({
@@ -38,9 +38,9 @@ export function PageTaskCard({
               name="status"
               defaultValue={task.status}
               onChange={(event) => event.currentTarget.form?.requestSubmit()}
-              className="rounded-lg border border-line bg-[#f8f9fa] px-2 py-1 text-xs"
+              className="rounded-lg border border-line bg-[#F8FAFC] px-2 py-1 text-xs"
             >
-              {PAGE_TASK_STATUSES.map((status) => (
+              {TASK_STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {pageTaskStatusLabel(status)}
                 </option>

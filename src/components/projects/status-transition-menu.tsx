@@ -8,24 +8,21 @@ import { updatePageTaskAction } from "@/app/actions/page-tasks";
 import { pageTaskStatusLabel } from "@/lib/format";
 
 const transitions = [
-  { action: "Respond to customer", status: "waiting_customer" },
+  { action: "To do", status: "open" },
   { action: "In progress", status: "in_progress" },
-  { action: "Escalate", status: "escalated" },
-  { action: "Pending", status: "pending" },
-  { action: "Fixed ready for testing", status: "ready_for_testing" },
-  { action: "Cancel request", status: "wont_do" },
-  { action: "Resolve this issue", status: "done" },
+  { action: "Done", status: "done" },
+  { action: "Canceled", status: "wont_do" },
 ] as const;
 
 const pillTone: Record<string, string> = {
-  open: "bg-[#deebff] text-[#0747a6]",
-  waiting_customer: "bg-[#deebff] text-[#0747a6]",
-  in_progress: "bg-[#deebff] text-[#0747a6]",
-  escalated: "bg-[#deebff] text-[#0747a6]",
-  pending: "bg-[#deebff] text-[#0747a6]",
-  ready_for_testing: "bg-[#fff0b3] text-[#7f5f01]",
-  done: "bg-[#e3fcef] text-[#006644]",
-  wont_do: "bg-[#e3fcef] text-[#006644]",
+  open: "bg-[#EFF6FF] text-[#1D4ED8]",
+  waiting_customer: "bg-[#EFF6FF] text-[#1D4ED8]",
+  in_progress: "bg-[#EFF6FF] text-[#1D4ED8]",
+  escalated: "bg-[#EFF6FF] text-[#1D4ED8]",
+  pending: "bg-[#EFF6FF] text-[#1D4ED8]",
+  ready_for_testing: "bg-[#FEF3C7] text-[#D97706]",
+  done: "bg-[#DCFCE7] text-[#16A34A]",
+  wont_do: "bg-[#DCFCE7] text-[#16A34A]",
 };
 
 function StatusPill({
@@ -125,7 +122,7 @@ export function StatusTransitionMenu({
               role="menu"
               aria-labelledby={labelId}
               style={{ top: pos.top, left: pos.left }}
-              className="fixed z-[80] w-[320px] rounded-[3px] border border-[#dcdfe4] bg-white py-1 shadow-[0_8px_16px_#091e4226,0_0_1px_#091e424f]"
+              className="fixed z-[80] w-[320px] rounded-[3px] border border-[#E2E8F0] bg-white py-1 shadow-[0_8px_16px_#091e4226,0_0_1px_#091e424f]"
             >
               {transitions.map((item) => (
                 <button
@@ -134,19 +131,19 @@ export function StatusTransitionMenu({
                   role="menuitem"
                   disabled={pending}
                   onClick={() => choose(item.status)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[14px] text-[#172b4d] hover:bg-[#f1f2f4] disabled:opacity-60"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[14px] text-[#172033] hover:bg-[#F1F5F9] disabled:opacity-60"
                 >
                   <span>{item.action}</span>
-                  <span className="inline-flex items-center gap-2 text-[#626f86]">
+                  <span className="inline-flex items-center gap-2 text-[#64748B]">
                     <span aria-hidden>→</span>
                     <StatusPill status={item.status} />
                   </span>
                 </button>
               ))}
-              <div className="my-1 border-t border-[#dcdfe4]" />
+              <div className="my-1 border-t border-[#E2E8F0]" />
               <button
                 type="button"
-                className="w-full px-3 py-2 text-left text-[14px] text-[#0c66e4] hover:bg-[#f1f2f4]"
+                className="w-full px-3 py-2 text-left text-[14px] text-[#2563EB] hover:bg-[#F1F5F9]"
                 onClick={() => {
                   setOpen(false);
                   setWorkflow(true);
@@ -171,12 +168,12 @@ export function StatusTransitionMenu({
               <div className="relative w-full max-w-lg rounded-[3px] bg-white p-5 shadow-[0_8px_16px_#091e4226]">
                 <div className="mb-4 flex items-start justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-[#172b4d]">Workflow</h2>
-                    <p className="mt-1 text-sm text-[#626f86]">Available status transitions for this work item.</p>
+                    <h2 className="text-base font-semibold text-[#172033]">Workflow</h2>
+                    <p className="mt-1 text-sm text-[#64748B]">Available status transitions for this task.</p>
                   </div>
                   <button
                     type="button"
-                    className="rounded-md p-1 text-[#626f86] hover:bg-[#f1f2f4]"
+                    className="rounded-md p-1 text-[#64748B] hover:bg-[#F1F5F9]"
                     onClick={() => setWorkflow(false)}
                   >
                     <X size={16} />
@@ -184,8 +181,8 @@ export function StatusTransitionMenu({
                 </div>
                 <div className="space-y-2">
                   {transitions.map((item) => (
-                    <div key={item.status} className="flex items-center justify-between rounded-[3px] bg-[#f7f8f9] px-3 py-2 text-sm">
-                      <span className="text-[#172b4d]">{item.action}</span>
+                    <div key={item.status} className="flex items-center justify-between rounded-[3px] bg-[#F8FAFC] px-3 py-2 text-sm">
+                      <span className="text-[#172033]">{item.action}</span>
                       <StatusPill status={item.status} />
                     </div>
                   ))}

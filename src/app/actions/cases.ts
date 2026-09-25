@@ -7,7 +7,7 @@ import { uniquePageNames } from "@/lib/pages";
 
 export async function createCaseAction(formData: FormData) {
   const session = await requireSession();
-  if (!canAddCases(session.role)) redirect("/");
+  if (!(await canAddCases(session.role))) redirect("/");
 
   const projectId = String(formData.get("projectId") || "");
   const existingPageId = String(formData.get("pageId") || "").trim();

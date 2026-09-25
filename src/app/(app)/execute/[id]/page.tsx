@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { canExecuteItem, requireSession } from "@/lib/auth";
+import { canExecuteItem, hasAccess, requireSession } from "@/lib/auth";
 import { findRunItemById } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { PriorityBadge, ResultBadge } from "@/components/ui/status-badge";
 import { executeItemAction, startItemAction } from "@/app/actions/execute";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function ExecutePage({
   params,
@@ -19,9 +21,10 @@ export default async function ExecutePage({
   const item = await findRunItemById(id);
   if (!item) notFound();
 
-  const canRun = canExecuteItem(user.role, item.assigneeId, user.id);
+  const canRun = await canExecuteItem(user.role, item.assigneeId, user.id);
   const linkedFix = item.fixTasks.find((fix) => fix.assigneeId === user.id);
-  if (!canRun && !(user.role === "FIXER" && linkedFix)) redirect("/");
+  const canFix = Boolean(linkedFix) && (await hasAccess(user.role, "updateFix"));
+  if (!canRun && !canFix) redirect("/");
 
   const steps = item.case.steps.split("\n").filter(Boolean);
   const locked = item.run.status === "closed" || !canRun;
@@ -32,8 +35,11 @@ export default async function ExecutePage({
       <main className="flex-1 p-6">
         <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1.2fr_.8fr]">
           <section className="rounded-xl border border-line bg-card p-6">
-            <p className="text-xs uppercase tracking-wide text-muted">
-              {item.case.project.name} · {item.run.name}
+            <BackLink href={`/runs/${item.run.id}`} label={item.run.name} />
+            <p className="mt-2 text-xs uppercase tracking-wide text-muted">
+              <Link href={`/projects/${item.case.project.id}/testing`} className="text-blue hover:underline">
+                {item.case.project.name} · Testing
+              </Link>
             </p>
             <div className="mt-2 flex items-center gap-2">
               <h1 className="text-2xl font-normal tracking-tight">
