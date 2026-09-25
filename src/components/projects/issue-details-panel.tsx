@@ -7,6 +7,7 @@ import { assignPageTaskAction, updatePageTaskAction, updatePageTaskFieldsAction 
 import { initials, pageTaskKindLabel } from "@/lib/format";
 import { kindsForFilter } from "@/lib/work-type";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 type Person = { id: string; name: string };
 
@@ -93,6 +94,7 @@ export function IssueDetailsPanel({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  useProcess(pending);
   const [assigneeIds, setAssigneeIds] = useState(task.assigneeIds);
   const [kind, setKind] = useState(task.kind);
   const [priority, setPriority] = useState(task.priority);

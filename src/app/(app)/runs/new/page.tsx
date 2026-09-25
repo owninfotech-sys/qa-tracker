@@ -7,6 +7,7 @@ import { WorkspaceSwitch } from "@/components/projects/workspace-switch";
 import { roleLabel } from "@/lib/format";
 import { testingHref } from "@/lib/workspace";
 import { BackLink } from "@/components/ui/back-link";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function NewRunPage({
   searchParams,
@@ -32,6 +33,7 @@ export default async function NewRunPage({
           </div>
         ) : null}
         <form action={createRunAction} className="max-w-3xl space-y-4 rounded-[3px] border border-[#E2E8F0] bg-white p-6">
+          <FormPendingLoader />
           <h1 className="text-xl font-semibold tracking-tight text-[#172033]">Start a run</h1>
           {error ? <p className="text-sm text-[#DC2626]">{error}</p> : null}
 

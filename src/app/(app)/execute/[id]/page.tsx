@@ -6,6 +6,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { PriorityBadge, ResultBadge } from "@/components/ui/status-badge";
 import { executeItemAction, startItemAction } from "@/app/actions/execute";
 import { BackLink } from "@/components/ui/back-link";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function ExecutePage({
   params,
@@ -92,6 +93,7 @@ export default async function ExecutePage({
               <>
                 {item.result === "pending" ? (
                   <form action={startItemAction} className="mt-4">
+                    <FormPendingLoader />
                     <input type="hidden" name="itemId" value={item.id} />
                     <button className="w-full rounded-lg border border-blue px-4 py-2.5 text-sm font-medium text-blue hover:bg-blue-soft">
                       Start testing
@@ -100,6 +102,7 @@ export default async function ExecutePage({
                 ) : null}
 
                 <form action={executeItemAction} className="mt-4 space-y-4">
+                  <FormPendingLoader />
                   <input type="hidden" name="itemId" value={item.id} />
                   <label className="block">
                     <span className="mb-1.5 block text-sm font-medium">Comment / actual result</span>

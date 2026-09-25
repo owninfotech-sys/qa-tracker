@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ScrollText, X } from "lucide-react";
 import { loadProjectLogsAction } from "@/app/actions/page-tasks";
 import { formatDateTime } from "@/lib/format";
+import { LoaderMark } from "@/components/ui/app-loader";
 
 export function BoardLogsPanel({
   projectId,
@@ -43,7 +44,9 @@ export function BoardLogsPanel({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {loading ? (
-            <p className="text-sm text-[#64748B]">Loading logs…</p>
+            <div className="flex justify-center py-10">
+              <LoaderMark size={40} />
+            </div>
           ) : rows.length === 0 ? (
             <p className="text-sm text-[#64748B]">No moves or reports yet.</p>
           ) : (

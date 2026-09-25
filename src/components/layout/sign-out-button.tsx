@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { LogOut } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export function SignOutButton({
   className,
@@ -51,6 +52,7 @@ export function SignOutButton({
                 Cancel
               </button>
               <form action={logoutAction}>
+                <FormPendingLoader />
                 <button
                   type="submit"
                   className="rounded-[3px] bg-[#DC2626] px-4 py-2 text-sm font-medium text-white hover:bg-[#B91C1C]"

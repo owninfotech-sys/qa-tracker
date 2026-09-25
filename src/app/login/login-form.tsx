@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { loginAction } from "@/app/actions/auth";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 const workspace = [
   { icon: BarChart3, title: "Dashboard", text: "Work by people, projects, on-time delivery, and issues" },
@@ -97,6 +98,7 @@ export function LoginForm({ error }: { error?: string }) {
             ) : null}
 
             <form action={loginAction} className="mt-6 space-y-4">
+              <FormPendingLoader />
               <label className="block">
                 <span className="mb-1.5 block text-[13px] font-medium text-[#172033]">Email</span>
                 <span className="relative block">

@@ -15,6 +15,7 @@ import {
 import { testingHref } from "@/lib/workspace";
 import { reorderProjectPagesAction } from "@/app/actions/projects";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 type PageLink = { id: string; name: string; count: number };
 
@@ -79,6 +80,7 @@ export function WorkQueueSidebar({
   const [items, setItems] = useState(pages);
   const [dragId, setDragId] = useState<string | null>(null);
   const [pending, startSave] = useTransition();
+  useProcess(pending);
   const start = useRef({ x: 0, y: 0, active: false });
   const drag = useRef<{ id: string } | null>(null);
   const itemsRef = useRef(pages);

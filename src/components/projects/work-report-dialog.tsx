@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Clock3, X } from "lucide-react";
 import { submitWorkReportAction } from "@/app/actions/page-tasks";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 export function WorkReportDialog({
   open,
@@ -34,6 +35,7 @@ export function WorkReportDialog({
 }) {
   const [body, setBody] = useState("");
   const [pending, setPending] = useState(false);
+  useProcess(pending);
   const [remain, setRemain] = useState("");
 
   useEffect(() => {

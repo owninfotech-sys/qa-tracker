@@ -11,6 +11,7 @@ import { DeleteProjectButton } from "@/components/projects/delete-project-button
 import { WorkspaceSwitch } from "@/components/projects/workspace-switch";
 import { formatDate, hrefLabel, isOverdue, percent, toHref } from "@/lib/format";
 import { tasksHref, testingHref, todayHref } from "@/lib/workspace";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function ProjectDashboardPage({
   params,
@@ -186,6 +187,7 @@ export default async function ProjectDashboardPage({
                   </Link>
                   {manage ? (
                     <form action={removeProjectPageAction}>
+                      <FormPendingLoader />
                       <input type="hidden" name="projectId" value={project.id} />
                       <input type="hidden" name="pageId" value={page.id} />
                       <button className="text-[#2563EB]/70 hover:text-[#DC2626]" aria-label={`Remove ${page.name}`}>
@@ -202,6 +204,7 @@ export default async function ProjectDashboardPage({
           ) : null}
           {manage ? (
             <form action={addProjectPagesAction} className="mt-4 space-y-3">
+              <FormPendingLoader />
               <input type="hidden" name="projectId" value={project.id} />
               <PageNameFields
                 resetKey={project.pages.map((page) => page.id).join("-")}

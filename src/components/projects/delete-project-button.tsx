@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 import { deleteProjectAction } from "@/app/actions/projects";
 
 export function DeleteProjectButton({
@@ -56,6 +57,7 @@ export function DeleteProjectButton({
                 Cancel
               </button>
               <form action={deleteProjectAction}>
+                <FormPendingLoader />
                 <input type="hidden" name="id" value={id} />
                 <button
                   type="submit"

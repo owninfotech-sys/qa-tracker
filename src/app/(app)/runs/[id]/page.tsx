@@ -9,6 +9,7 @@ import { assignItemsAction, closeRunAction } from "@/app/actions/runs";
 import { formatDate, percent, roleLabel } from "@/lib/format";
 import { WorkspaceSwitch } from "@/components/projects/workspace-switch";
 import { BackLink } from "@/components/ui/back-link";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function RunPage({
   params,
@@ -61,6 +62,7 @@ export default async function RunPage({
 
         {manage && run.status === "open" ? (
           <form action={assignItemsAction} className="rounded-xl border border-line bg-card p-4">
+            <FormPendingLoader />
             <input type="hidden" name="runId" value={run.id} />
             <div className="mb-3 flex flex-wrap items-end gap-3">
               <label className="block">
@@ -153,6 +155,7 @@ export default async function RunPage({
 
         {manage && run.status === "open" ? (
           <form action={closeRunAction} className="flex max-w-xl items-end gap-3">
+            <FormPendingLoader />
             <input type="hidden" name="runId" value={run.id} />
             <label className="block flex-1">
               <span className="mb-1 block text-xs text-muted">

@@ -26,6 +26,7 @@ import {
 import { CreateWorkItemModal } from "@/components/projects/create-work-item-modal";
 import { IssueDetailsPanel } from "@/components/projects/issue-details-panel";
 import { BackLink } from "@/components/ui/back-link";
+import { FormPendingLoader, useProcess } from "@/components/ui/app-loader";
 import {
   addPageTaskCommentAction,
   deletePageTaskAction,
@@ -228,6 +229,7 @@ export function IssueDetailView({
   const [titleDirty, setTitleDirty] = useState(false);
   const [descDirty, setDescDirty] = useState(false);
   const [pending, startTransition] = useTransition();
+  useProcess(pending);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const commentRef = useRef<HTMLTextAreaElement>(null);
@@ -374,6 +376,7 @@ export function IssueDetailView({
             {canAdmin ? (
             <Menu label="" icon={<MoreHorizontal size={18} />}>
               <form action={deletePageTaskAction}>
+                <FormPendingLoader />
                 <input type="hidden" name="id" value={task.id} />
                 <input type="hidden" name="projectId" value={task.projectId} />
                 <input type="hidden" name="pageId" value={task.pageId} />

@@ -47,6 +47,7 @@ export type DashboardActivity = {
   taskKey: string;
   title: string;
   project: string;
+  projectId: string;
   assignee: string;
   status: string;
   kind: string;
@@ -320,7 +321,7 @@ export function buildWorkDashboard(
       label: "Open Issues",
       value: issuesOpen,
       hint: vs,
-      href: "/issues",
+      href: "/activity?type=issues",
       tone: "purple",
       delta: pctChange(issuesNow, issuesPrev),
       spark: sparkLast7(issueSpark),
@@ -330,7 +331,7 @@ export function buildWorkDashboard(
       label: "On Time Delivery",
       value: `${done ? Math.round((onTime / done) * 100) : 0}%`,
       hint: vs,
-      href: "/?view=ontime",
+      href: "/activity?flag=done",
       tone: "orange",
       delta: pctChange(rateNow, ratePrev),
       spark: sparkLast7(onTimeSpark),
@@ -340,7 +341,7 @@ export function buildWorkDashboard(
       label: "Late",
       value: late,
       hint: vs,
-      href: "/?view=late",
+      href: "/activity?flag=late",
       tone: "red",
       delta: pctChange(lateNow, latePrev),
       spark: sparkLast7(lateSpark),
@@ -350,7 +351,7 @@ export function buildWorkDashboard(
       label: "Overdue",
       value: overdue,
       hint: vs,
-      href: "/?view=overdue",
+      href: "/activity?flag=overdue",
       tone: "pink",
       delta: pctChange(overdueNow, overduePrev),
       spark: sparkLast7(overdueSpark),
@@ -406,7 +407,7 @@ export function buildWorkDashboard(
     ].filter((item) => item.value > 0),
     trend,
     attention: buildAttention(tasks, userNames),
-    activity: buildActivity(tasks, userNames),
+    activity: buildActivity(tasks, userNames, 8),
   };
 }
 
@@ -453,11 +454,10 @@ function buildAttention(tasks: DashboardTask[], userNames: Map<string, string>):
   return ranked.sort((a, b) => order[a.flag] - order[b.flag]).slice(0, 12);
 }
 
-function buildActivity(tasks: DashboardTask[], userNames: Map<string, string>): DashboardActivity[] {
+export function buildActivity(tasks: DashboardTask[], userNames: Map<string, string>, limit = 8): DashboardActivity[] {
   const now = Date.now();
-  return [...tasks]
+  const rows = [...tasks]
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-    .slice(0, 8)
     .map((task) => {
       const finished = isDone(task.status);
       const overdue = !finished && task.dueAt.getTime() < now;
@@ -467,12 +467,14 @@ function buildActivity(tasks: DashboardTask[], userNames: Map<string, string>): 
         taskKey: task.taskKey,
         title: task.title,
         project: projectLabel(task),
+        projectId: task.projectId,
         assignee: namesFor(task, userNames),
         status: task.status,
         kind: pageTaskKindLabel(task.kind),
         kindKey: task.kind,
         createdLabel: createdLabel(task.createdAt),
         flag: overdue ? "overdue" : late ? "late" : finished ? "done" : "open",
-      };
+      } satisfies DashboardActivity;
     });
+  return limit > 0 ? rows.slice(0, limit) : rows;
 }

@@ -4,6 +4,7 @@ import { useRef, useTransition } from "react";
 import { Camera, X } from "lucide-react";
 import { removeUserLogoAction, uploadUserLogoAction } from "@/app/actions/users";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 import { initials } from "@/lib/format";
 
 export function PersonLogo({
@@ -19,6 +20,7 @@ export function PersonLogo({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
+  useProcess(pending);
 
   function onFile(file?: File) {
     if (!file) return;

@@ -7,6 +7,7 @@ import { createUserAction, toggleUserAction, updateUserRoleAction } from "@/app/
 import { RoleFields } from "@/components/team/role-fields";
 import { PersonLogo } from "@/components/team/person-logo";
 import { AccessMatrix } from "@/components/team/access-matrix";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 import { MATRIX_ROLE_ORDER, PRESET_ROLES, presetRoleLabel, tabAccess, workAccess } from "@/lib/access";
 import { accessMatrixFor } from "@/lib/role-access";
 
@@ -47,6 +48,7 @@ export default async function TeamPage({
 
         {canEditPeople ? (
           <form action={createUserAction} className="grid gap-3 rounded-xl border border-line bg-card p-5 md:grid-cols-5">
+            <FormPendingLoader />
             {error ? <p className="text-sm text-danger md:col-span-5">{decodeURIComponent(error)}</p> : null}
             <input name="name" required placeholder="Full name" className="rounded-lg border border-line px-3 py-2.5 text-sm" />
             <input name="email" type="email" required placeholder="email@owninfotech.com" className="rounded-lg border border-line px-3 py-2.5 text-sm" />
@@ -102,6 +104,7 @@ export default async function TeamPage({
                         <RoleBadge role={person.role} />
                       ) : (
                         <form action={updateUserRoleAction} className="flex flex-wrap items-center gap-2">
+                          <FormPendingLoader />
                           <input type="hidden" name="id" value={person.id} />
                           <RoleFields defaultRole={person.role} compact />
                           <button className="text-sm font-medium text-blue hover:underline">Save</button>
@@ -150,6 +153,7 @@ export default async function TeamPage({
                     <td className="px-4 py-3 text-right">
                       {person.id !== user.id && canEditPeople ? (
                         <form action={toggleUserAction}>
+                          <FormPendingLoader />
                           <input type="hidden" name="id" value={person.id} />
                           <input type="hidden" name="active" value={String(person.active)} />
                           <button className="text-sm font-medium text-blue hover:underline">

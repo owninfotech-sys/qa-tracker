@@ -6,6 +6,7 @@ import { FixBadge, PriorityBadge } from "@/components/ui/status-badge";
 import { assignFixAction, updateFixAction, wontFixAction } from "@/app/actions/fixes";
 import { formatDateTime } from "@/lib/format";
 import { BackLink } from "@/components/ui/back-link";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function FixDetailPage({
   params,
@@ -97,6 +98,7 @@ export default async function FixDetailPage({
 
             {manage ? (
               <form action={assignFixAction} className="rounded-xl border border-line bg-card p-5">
+                <FormPendingLoader />
                 <input type="hidden" name="fixId" value={fix.id} />
                 <h2 className="text-sm font-medium">Assign fixer</h2>
                 <select name="assigneeId" defaultValue={fix.assigneeId ?? ""} className="mt-3 w-full rounded-lg border border-line px-3 py-2.5 text-sm">
@@ -115,6 +117,7 @@ export default async function FixDetailPage({
 
             {canUpdate && !["closed", "wont_fix"].includes(fix.status) ? (
               <form action={updateFixAction} className="rounded-xl border border-line bg-card p-5">
+                <FormPendingLoader />
                 <input type="hidden" name="fixId" value={fix.id} />
                 <h2 className="text-sm font-medium">Update work</h2>
                 <textarea
@@ -137,6 +140,7 @@ export default async function FixDetailPage({
 
             {manage && !["closed", "wont_fix"].includes(fix.status) ? (
               <form action={wontFixAction} className="rounded-xl border border-line bg-card p-5">
+                <FormPendingLoader />
                 <input type="hidden" name="fixId" value={fix.id} />
                 <h2 className="text-sm font-medium">Won&apos;t fix</h2>
                 <input name="reason" required className="mt-3 w-full rounded-lg border border-line px-3 py-2.5 text-sm" placeholder="Reason" />

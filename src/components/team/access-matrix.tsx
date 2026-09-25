@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { saveAccessMatrixAction } from "@/app/actions/access";
 import { ACCESS_FIELDS, LOCKED_ADMIN_ACCESS, type AccessKey } from "@/lib/access";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 type RoleOption = { value: string; label: string };
 
@@ -19,6 +20,7 @@ export function AccessMatrix({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  useProcess(pending);
   const tabs = ACCESS_FIELDS.filter((field) => field.group === "tab");
   const work = ACCESS_FIELDS.filter((field) => field.group === "work");
 

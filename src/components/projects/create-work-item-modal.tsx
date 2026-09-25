@@ -14,6 +14,7 @@ import { createPageTaskAction } from "@/app/actions/page-tasks";
 import { initials, pageTaskKindLabel, pageTaskStatusLabel, roleLabel } from "@/lib/format";
 import { TASK_STATUSES, type PageTaskKind } from "@/lib/types";
 import { defaultKindForWorkType, kindsForWorkType } from "@/lib/work-type";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export type CreatePerson = { id: string; name: string; role?: string };
 
@@ -137,6 +138,7 @@ export function CreateWorkItemModal({
         action={createPageTaskAction}
         className="relative w-full max-w-[720px] overflow-hidden rounded-[3px] bg-white shadow-[0_8px_16px_rgba(9,30,66,.25)]"
       >
+        <FormPendingLoader />
         <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-3">
           <div>
             <h2 className="text-[16px] font-semibold text-[#172033]">

@@ -5,6 +5,7 @@ import { AlertTriangle, Bug, ClipboardList, LayoutGrid, Paintbrush, Sparkles } f
 import { createPageTaskAction } from "@/app/actions/page-tasks";
 import { PAGE_TASK_KINDS, type PageTaskKind } from "@/lib/types";
 import { pageTaskKindLabel } from "@/lib/format";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 const kindMeta: Record<PageTaskKind, { hint: string; icon: typeof AlertTriangle }> = {
   task: { hint: "Work to assign and complete", icon: ClipboardList },
@@ -28,6 +29,7 @@ export function PageTaskForm({
 
   return (
     <form action={createPageTaskAction} className="space-y-4">
+      <FormPendingLoader />
       <input type="hidden" name="projectId" value={projectId} />
       <input type="hidden" name="pageId" value={pageId} />
       <input type="hidden" name="kind" value={kind} />

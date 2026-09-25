@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { updatePageTaskAction } from "@/app/actions/page-tasks";
 import { pageTaskStatusLabel } from "@/lib/format";
+import { useProcess } from "@/components/ui/app-loader";
 
 const transitions = [
   { action: "To do", status: "open" },
@@ -57,6 +58,7 @@ export function StatusTransitionMenu({
   const [open, setOpen] = useState(false);
   const [workflow, setWorkflow] = useState(false);
   const [pending, startTransition] = useTransition();
+  useProcess(pending);
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });

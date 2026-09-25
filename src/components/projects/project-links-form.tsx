@@ -1,4 +1,5 @@
 import { updateProjectLinksAction } from "@/app/actions/projects";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export function ProjectLinksForm({
   id,
@@ -11,6 +12,7 @@ export function ProjectLinksForm({
 }) {
   return (
     <form action={updateProjectLinksAction} className="space-y-3">
+      <FormPendingLoader />
       <input type="hidden" name="id" value={id} />
       <label className="block">
         <span className="mb-1.5 block text-xs font-medium text-muted">Site URL</span>

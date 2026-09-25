@@ -7,6 +7,7 @@ import { CalendarClock, Figma, FolderKanban, Link2 } from "lucide-react";
 import { createProjectAction, updateProjectDetailsAction } from "@/app/actions/projects";
 import { PageNameFields } from "@/components/projects/page-name-fields";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 import { toDateInput } from "@/lib/format";
 
 const fieldClass =
@@ -14,6 +15,7 @@ const fieldClass =
 
 function SubmitButton({ editing }: { editing: boolean }) {
   const { pending } = useFormStatus();
+  useProcess(pending);
   return (
     <button
       type="submit"

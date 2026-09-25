@@ -4,7 +4,7 @@ import type { Role } from "@/lib/types";
 import { isOpenWorkStatus, parseWorkType, ISSUE_KINDS } from "@/lib/work-type";
 import { parseAssigneeIds, formatTaskKey, projectCodeFromName } from "@/lib/task-key";
 import { isTodayTask, taskDueAt, todayReason, testingTodayReason, type TodayReason } from "@/lib/today";
-import { buildWorkDashboard, parseRangeDays, type DashboardRange, type DashboardTask } from "@/lib/dashboard";
+import { buildActivity, buildWorkDashboard, parseRangeDays, type DashboardRange, type DashboardTask } from "@/lib/dashboard";
 
 type Row = Record<string, unknown>;
 
@@ -1502,6 +1502,15 @@ async function loadDashboardTasks(userId?: string) {
     };
   });
   return userId ? mapped.filter((task) => task.assigneeIds.includes(userId)) : mapped;
+}
+
+export async function findWorkActivity(options?: { userId?: string }) {
+  const [tasks, users] = await Promise.all([
+    loadDashboardTasks(options?.userId),
+    query<{ id: string; name: string }>("SELECT id, name FROM qa_user"),
+  ]);
+  const userNames = new Map(users.map((user) => [user.id, user.name]));
+  return buildActivity(tasks, userNames, 0);
 }
 
 export async function findWorkDashboard(options?: { userId?: string; rangeDays?: DashboardRange | string | null }) {

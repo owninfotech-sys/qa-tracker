@@ -6,6 +6,7 @@ import { requestDayReportAction } from "@/app/actions/page-tasks";
 import { WorkReportDialog } from "@/components/projects/work-report-dialog";
 import { formatDateTime } from "@/lib/format";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 type SavedReport = {
   id: string;
@@ -69,6 +70,7 @@ export function TodayDoneReport({
   const [editOpen, setEditOpen] = useState(false);
   const [current, setCurrent] = useState(report ?? null);
   const [pending, startTransition] = useTransition();
+  useProcess(pending);
   const submitted = Boolean(current?.submittedAt && current.body);
   const preview = current?.body || draft;
 

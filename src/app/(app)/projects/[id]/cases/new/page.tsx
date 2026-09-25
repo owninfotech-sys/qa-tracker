@@ -4,6 +4,7 @@ import { findProjectWithPages } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { createCaseAction } from "@/app/actions/cases";
 import { TestingNav } from "@/components/projects/testing-nav";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export default async function NewCasePage({
   params,
@@ -35,6 +36,7 @@ export default async function NewCasePage({
           manage={manage}
         />
         <form action={createCaseAction} className="max-w-2xl space-y-4 rounded-[3px] border border-[#E2E8F0] bg-white p-6">
+          <FormPendingLoader />
           <h2 className="text-lg font-semibold text-[#172033]">Add test point</h2>
           {error ? <p className="text-sm text-[#DC2626]">{error}</p> : null}
           <input type="hidden" name="projectId" value={project.id} />

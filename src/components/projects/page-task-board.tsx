@@ -24,6 +24,7 @@ import { kindsForFilter } from "@/lib/work-type";
 import { WorkReportDialog } from "@/components/projects/work-report-dialog";
 import { BoardLogsPanel } from "@/components/projects/board-logs";
 import { toast } from "@/components/ui/toast";
+import { useProcess } from "@/components/ui/app-loader";
 
 const statusTone: Record<string, string> = {
   open: "bg-[#E2E8F0] text-[#64748B]",
@@ -125,6 +126,7 @@ export function PageTaskBoard({
   const [overSlot, setOverSlot] = useState<{ columnId: string; beforeId: string | null } | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number; width: number } | null>(null);
   const [pending, startTransition] = useTransition();
+  useProcess(pending);
   const origin = useRef({ x: 0, y: 0, dragging: false, id: "", width: 0, pointerId: -1 });
   const itemsRef = useRef(tasks);
   const suppressClick = useRef(false);

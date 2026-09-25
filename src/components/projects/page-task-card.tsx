@@ -4,6 +4,7 @@ import { deletePageTaskAction, updatePageTaskAction } from "@/app/actions/page-t
 import { PriorityBadge } from "@/components/ui/status-badge";
 import { TASK_STATUSES } from "@/lib/types";
 import { pageTaskStatusLabel } from "@/lib/format";
+import { FormPendingLoader } from "@/components/ui/app-loader";
 
 export function PageTaskCard({
   task,
@@ -31,6 +32,7 @@ export function PageTaskCard({
       {canEdit ? (
         <div className="mt-3 flex items-center justify-between gap-2">
           <form action={updatePageTaskAction}>
+            <FormPendingLoader />
             <input type="hidden" name="id" value={task.id} />
             <input type="hidden" name="projectId" value={task.projectId} />
             <input type="hidden" name="pageId" value={task.pageId} />
@@ -48,6 +50,7 @@ export function PageTaskCard({
             </select>
           </form>
           <form action={deletePageTaskAction}>
+            <FormPendingLoader />
             <input type="hidden" name="id" value={task.id} />
             <input type="hidden" name="projectId" value={task.projectId} />
             <input type="hidden" name="pageId" value={task.pageId} />
