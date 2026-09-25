@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ClipboardCheck, Figma, ListChecks, Pencil, Sun } from "lucide-react";
-import { canManage, hasAccess, requireSession } from "@/lib/auth";
-import { findProjectDashboard, findTodayTasks } from "@/lib/data";
+import { canManage, hasAccess, requireProjectAccess } from "@/lib/auth";
+import { findProjectDashboard, findTodayTasks, findProjectMembers, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { BackLink } from "@/components/ui/back-link";
 import { addProjectPagesAction, removeProjectPageAction } from "@/app/actions/projects";
@@ -12,6 +12,7 @@ import { WorkspaceSwitch } from "@/components/projects/workspace-switch";
 import { formatDate, hrefLabel, isOverdue, percent, toHref } from "@/lib/format";
 import { tasksHref, testingHref, todayHref } from "@/lib/workspace";
 import { FormPendingLoader } from "@/components/ui/app-loader";
+import { ProjectTeams } from "@/components/projects/project-teams";
 
 export default async function ProjectDashboardPage({
   params,
@@ -20,14 +21,18 @@ export default async function ProjectDashboardPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await requireSession();
   const { id } = await params;
+  const user = await requireProjectAccess(id);
   const { error } = await searchParams;
   const manage = await canManage(user.role);
   const showTesting = await hasAccess(user.role, "testing");
   const project = await findProjectDashboard(id);
   if (!project) notFound();
-  const todayTasks = await findTodayTasks(id);
+  const [todayTasks, members, people] = await Promise.all([
+    findTodayTasks(id),
+    findProjectMembers(id),
+    manage ? findUsers({ active: true, orderBy: "name" }) : Promise.resolve([]),
+  ]);
   const todayOpen = todayTasks.filter((task) => task.reason !== "done_today").length;
 
   const firstPageId = project.pages[0]?.id ?? null;
@@ -169,6 +174,18 @@ export default async function ProjectDashboardPage({
           </Link>
           ) : null}
         </div>
+
+        <ProjectTeams
+          projectId={project.id}
+          members={members}
+          canEdit={manage}
+          people={people.map((person) => ({
+            id: person.id,
+            name: person.name,
+            role: person.role,
+            logo: person.logo,
+          }))}
+        />
 
         <section className="rounded-[3px] border border-[#E2E8F0] bg-white p-5">
           <h2 className="text-sm font-semibold text-[#172033]">Areas</h2>

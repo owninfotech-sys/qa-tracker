@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { hasAccess, requireSession } from "@/lib/auth";
-import { findPageTasksForBoard, findProjectWorkQueue, findUsers } from "@/lib/data";
+import { hasAccess, requireProjectAccess } from "@/lib/auth";
+import { findPageTasksForBoard, findProjectMembers, findProjectWorkQueue, findUsers } from "@/lib/data";
 import { parseAssigneeIds, taskKey } from "@/lib/task-key";
 import { loadSortOrders } from "@/lib/task-order";
 import { PageTaskList } from "@/components/projects/page-task-list";
@@ -15,8 +15,8 @@ export default async function PageTaskDashboard({
   params: Promise<{ id: string; pageId: string }>;
   searchParams: Promise<{ error?: string; add?: string; queue?: string; view?: string }>;
 }) {
-  const user = await requireSession();
   const { id, pageId } = await params;
+  const user = await requireProjectAccess(id);
   const { error, add, queue, view } = await searchParams;
   const canCreate = await hasAccess(user.role, "createTask");
   const canEdit = await hasAccess(user.role, "manageTask");
@@ -52,6 +52,9 @@ export default async function PageTaskDashboard({
     name: person.name,
     role: person.role,
   }));
+  const members = await findProjectMembers(project.id);
+  const developerIds = members.filter((member) => member.team === "developer").map((member) => member.userId);
+  const teamPeople = developerIds.length ? people.filter((person) => developerIds.includes(person.id)) : people;
   const peopleById = new Map(people.map((person) => [person.id, person.name]));
 
   const toListTask = (task: (typeof allTasks)[number]) => {
@@ -106,7 +109,7 @@ export default async function PageTaskDashboard({
         projectName={project.name}
         pageId={page.id}
         pageName={page.name}
-        people={people}
+        people={teamPeople}
         error={error}
         defaultOpen={canCreate && (add === "1" || Boolean(error))}
         workType="tasks"

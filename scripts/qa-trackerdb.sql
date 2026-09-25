@@ -30,6 +30,19 @@ CREATE TABLE IF NOT EXISTS `qa_project` (
   CONSTRAINT `qa_project_ownerId_fkey` FOREIGN KEY (`ownerId`) REFERENCES `qa_user` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `qa_project_member` (
+  `id` varchar(191) NOT NULL,
+  `projectId` varchar(191) NOT NULL,
+  `userId` varchar(191) NOT NULL,
+  `team` varchar(32) NOT NULL,
+  `createdAt` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `qa_project_member_unique` (`projectId`,`userId`,`team`),
+  KEY `qa_project_member_userId_fkey` (`userId`),
+  CONSTRAINT `qa_project_member_projectId_fkey` FOREIGN KEY (`projectId`) REFERENCES `qa_project` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `qa_project_member_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `qa_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `qa_module` (
   `id` varchar(191) NOT NULL,
   `projectId` varchar(191) NOT NULL,

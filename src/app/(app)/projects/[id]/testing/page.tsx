@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { canAddCases, canManageRuns, hasAccess, homeForRole, requireSession } from "@/lib/auth";
+import { canAddCases, canManageRuns, hasAccess, homeForRole, requireProjectAccess } from "@/lib/auth";
 import { findProjectDashboard } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { StatCard } from "@/components/ui/stat-card";
@@ -15,8 +15,8 @@ export default async function ProjectTestingPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireSession();
   const { id } = await params;
+  const user = await requireProjectAccess(id);
   if (!(await hasAccess(user.role, "testing"))) redirect(await homeForRole(user.role));
   const manage = await canManageRuns(user.role);
   const canAdd = await canAddCases(user.role);

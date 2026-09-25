@@ -38,6 +38,23 @@ mysql(
   { stdio: "inherit" },
 );
 
+mysql(
+  [
+    "-e",
+    `CREATE TABLE IF NOT EXISTS \`${config.database}\`.\`qa_project_member\` (
+      \`id\` varchar(191) NOT NULL,
+      \`projectId\` varchar(191) NOT NULL,
+      \`userId\` varchar(191) NOT NULL,
+      \`team\` varchar(32) NOT NULL,
+      \`createdAt\` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`qa_project_member_unique\` (\`projectId\`,\`userId\`,\`team\`),
+      KEY \`qa_project_member_userId_fkey\` (\`userId\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  ],
+  { stdio: "inherit" },
+);
+
 const extraColumns = [
   ["qa_page_task", "assigneeIds", "TEXT NULL"],
   ["qa_page_task", "sortOrder", "INT NOT NULL DEFAULT 0"],
@@ -109,6 +126,8 @@ const foreignKeys = [
   ["qa_test_case", "qa_test_case_moduleId_fkey", "moduleId", "qa_module", "id", "RESTRICT", "CASCADE"],
   ["qa_test_case", "qa_test_case_pageId_fkey", "pageId", "qa_page", "id", "SET NULL", "CASCADE"],
   ["qa_test_run", "qa_test_run_projectId_fkey", "projectId", "qa_project", "id", "CASCADE", "CASCADE"],
+  ["qa_project_member", "qa_project_member_projectId_fkey", "projectId", "qa_project", "id", "CASCADE", "CASCADE"],
+  ["qa_project_member", "qa_project_member_userId_fkey", "userId", "qa_user", "id", "CASCADE", "CASCADE"],
   ["qa_run_item", "qa_run_item_runId_fkey", "runId", "qa_test_run", "id", "CASCADE", "CASCADE"],
   ["qa_run_item", "qa_run_item_caseId_fkey", "caseId", "qa_test_case", "id", "RESTRICT", "CASCADE"],
   ["qa_fix_task", "qa_fix_task_runItemId_fkey", "runItemId", "qa_run_item", "id", "CASCADE", "CASCADE"],

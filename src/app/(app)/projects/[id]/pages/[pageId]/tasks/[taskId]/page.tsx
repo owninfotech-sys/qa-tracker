@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
-import { hasAccess, requireSession } from "@/lib/auth";
+import { hasAccess, requireProjectAccess } from "@/lib/auth";
 import {
   findPageTaskDetail,
+  findProjectMembers,
   findSiblingTasks,
   findTaskActivity,
   findTaskAttachments,
@@ -16,8 +17,8 @@ export default async function IssueDetailPage({
 }: {
   params: Promise<{ id: string; pageId: string; taskId: string }>;
 }) {
-  const user = await requireSession();
   const { id, pageId, taskId } = await params;
+  const user = await requireProjectAccess(id);
   const canCreate = await hasAccess(user.role, "createTask");
   const canEdit = await hasAccess(user.role, "manageTask");
   const slaEdit = await hasAccess(user.role, "manageTask");
@@ -31,12 +32,15 @@ export default async function IssueDetailPage({
   const task = await findPageTaskDetail(taskId);
   if (!task || task.projectId !== id) notFound();
 
-  const [people, activity, siblings, files] = await Promise.all([
+  const [people, activity, siblings, files, members] = await Promise.all([
     findUsers({ active: true, orderBy: "createdAt" }),
     findTaskActivity(task.id),
     findSiblingTasks(id, task.id),
     findTaskAttachments(task.id),
+    findProjectMembers(id),
   ]);
+  const developerIds = members.filter((member) => member.team === "developer").map((member) => member.userId);
+  const teamPeople = developerIds.length ? people.filter((person) => developerIds.includes(person.id)) : people;
 
   const linkedIds = parseLinkedIds(task.linkedTaskIds);
   const linked = siblings.filter((item) => linkedIds.includes(item.id));
@@ -59,7 +63,7 @@ export default async function IssueDetailPage({
         projectName={task.project.name}
         pageId={pageId}
         pageName={task.page.name}
-        people={people}
+        people={teamPeople}
         workType="tasks"
         showTesting={showTesting}
       />
@@ -73,7 +77,7 @@ export default async function IssueDetailPage({
         role={user.role}
         currentUserId={user.id}
         currentUserName={user.name}
-        people={people}
+        people={teamPeople}
         comments={task.comments.map((comment) => ({
           id: comment.id,
           body: comment.body,

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSession } from "@/lib/auth";
+import { requireProjectAccess } from "@/lib/auth";
 import { findFirstPage } from "@/lib/data";
 
 export default async function ProjectPagesIndex({
@@ -7,8 +7,8 @@ export default async function ProjectPagesIndex({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireSession();
   const { id } = await params;
+  await requireProjectAccess(id);
   const first = await findFirstPage(id);
   redirect(first ? `/projects/${id}/pages/${first.id}` : `/projects/${id}`);
 }

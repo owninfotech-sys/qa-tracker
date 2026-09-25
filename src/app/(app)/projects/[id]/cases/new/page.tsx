@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { canAddCases, canManageRuns, hasAccess, homeForRole, requireSession } from "@/lib/auth";
+import { canAddCases, canManageRuns, hasAccess, homeForRole, requireProjectAccess } from "@/lib/auth";
 import { findProjectWithPages } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { createCaseAction } from "@/app/actions/cases";
@@ -13,10 +13,10 @@ export default async function NewCasePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
-  const user = await requireSession();
+  const { id } = await params;
+  const user = await requireProjectAccess(id);
   if (!(await hasAccess(user.role, "testing"))) redirect(await homeForRole(user.role));
   if (!(await canAddCases(user.role))) redirect("/");
-  const { id } = await params;
   const { error } = await searchParams;
   const manage = await canManageRuns(user.role);
 

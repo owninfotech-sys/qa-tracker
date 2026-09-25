@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { canManageRuns, requireSession } from "@/lib/auth";
+import { canManageRuns, canSeeAllProjects, requireSession } from "@/lib/auth";
 import { findActiveProjectsForRun, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { createRunAction } from "@/app/actions/runs";
@@ -18,7 +18,7 @@ export default async function NewRunPage({
   if (!(await canManageRuns(user.role))) redirect("/");
   const { projectId, error } = await searchParams;
 
-  const projects = await findActiveProjectsForRun();
+  const projects = await findActiveProjectsForRun({ userId: user.id, all: await canSeeAllProjects(user.role) });
   const people = await findUsers({ active: true, orderBy: "createdAt" });
   const selected = projects.find((project) => project.id === projectId) ?? projects[0];
 

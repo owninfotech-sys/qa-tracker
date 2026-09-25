@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ClipboardCheck, Figma, FolderKanban, ListChecks, Pencil, Plus, Sun } from "lucide-react";
-import { canManage, hasAccess, homeForRole, requireSession } from "@/lib/auth";
-import { findActiveProjectsList, findTodayTasks, findTodayTesting, findTodayDayReports, findUsers } from "@/lib/data";
+import { canManage, canSeeAllProjects, hasAccess, homeForRole, requireSession } from "@/lib/auth";
+import { findActiveProjectsList, findTodayTasks, findTodayTesting, findTodayDayReports, findUsers, findAssignedProjectIds } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteProjectButton } from "@/components/projects/delete-project-button";
@@ -51,17 +51,25 @@ export default async function ProjectsPage({
   const user = await requireSession();
   if (!(await hasAccess(user.role, "projects"))) redirect(await homeForRole(user.role));
   const manage = await canManage(user.role);
+  const seesAll = await canSeeAllProjects(user.role);
   const canSeeTesting = await hasAccess(user.role, "testing");
   const { tab, work } = await searchParams;
   const todayTab = tab === "today";
   const todayWork = parseTodayWork(work);
-  const [projects, todayTasks, todayTesting, todayReports, admins] = await Promise.all([
-    findActiveProjectsList(),
+  const [projects, todayTasksRaw, todayTestingRaw, todayReports, admins] = await Promise.all([
+    findActiveProjectsList({ userId: user.id, all: seesAll }),
     todayTab ? findTodayTasks() : Promise.resolve([]),
     todayTab ? findTodayTesting() : Promise.resolve([]),
     todayTab ? findTodayDayReports() : Promise.resolve([]),
     todayTab ? findUsers({ active: true, role: "ADMIN", orderBy: "createdAt" }) : Promise.resolve([]),
   ]);
+  let todayTasks = todayTasksRaw;
+  let todayTesting = todayTestingRaw;
+  if (todayTab && !seesAll) {
+    const allowed = await findAssignedProjectIds(user.id);
+    todayTasks = todayTasksRaw.filter((task) => allowed.has(task.projectId));
+    todayTesting = todayTestingRaw.filter((item) => allowed.has(item.projectId));
+  }
   const remainingTasks = todayTasks.filter((task) => task.reason !== "done_today").length;
   const remainingTests = todayTesting.filter((item) => item.reason !== "done_today").length;
   const remainingToday = remainingTasks + remainingTests;
@@ -85,7 +93,9 @@ export default async function ProjectsPage({
                 ? remainingToday
                   ? `${remainingTasks} task${remainingTasks === 1 ? "" : "s"} and ${remainingTests} test point${remainingTests === 1 ? "" : "s"} still to do today.`
                   : "Today’s task work and testing, split so each can be handled differently."
-                : "Every project includes task management, today's work, and testing."}
+                : seesAll
+                  ? "Every project includes task management, today's work, and testing."
+                  : "Only the projects you are assigned to as developer or testing team."}
             </p>
           </div>
           {manage && !todayTab ? (
@@ -165,8 +175,12 @@ export default async function ProjectsPage({
           </div>
         ) : projects.length === 0 ? (
           <EmptyState
-            title="No projects yet"
-            body="Create a project to assign tasks and run testing in the same place."
+            title={seesAll ? "No projects yet" : "No assigned projects"}
+            body={
+              seesAll
+                ? "Create a project to assign tasks and run testing in the same place."
+                : "You will see a project here after you are added to its developer or testing team."
+            }
           >
             {manage ? (
               <Link href="/projects/new" className="text-sm font-medium text-blue">

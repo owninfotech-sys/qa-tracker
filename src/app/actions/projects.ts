@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canManage, hasAccess, requireSession } from "@/lib/auth";
 import {
+  addProjectMember,
   createPage,
   createProject,
   deletePage,
@@ -11,8 +12,10 @@ import {
   findPages,
   findProjectById,
   mergeDuplicatePages,
+  removeProjectMember,
   updateProject,
   writePageSortOrders,
+  type ProjectTeam,
 } from "@/lib/data";
 import { uniquePageNames } from "@/lib/pages";
 import { clipText, parseWorkType } from "@/lib/work-type";
@@ -192,5 +195,37 @@ export async function reorderProjectPagesAction(formData: FormData) {
 
   await writePageSortOrders(projectId, orderedIds);
   revalidatePath(`/projects/${projectId}`, "layout");
+  return { ok: true as const };
+}
+
+export async function addProjectMemberAction(formData: FormData) {
+  const session = await requireSession();
+  if (!(await canManage(session.role))) return { ok: false as const, error: "You cannot assign project teams." };
+  const projectId = String(formData.get("projectId") || "");
+  const userId = String(formData.get("userId") || "");
+  const team = String(formData.get("team") || "") as ProjectTeam;
+  if (!projectId || !userId || (team !== "developer" && team !== "testing")) {
+    return { ok: false as const, error: "Pick a person for this team." };
+  }
+  const project = await findProjectById(projectId);
+  if (!project) return { ok: false as const, error: "Project not found." };
+  await addProjectMember(projectId, userId, team);
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const };
+}
+
+export async function removeProjectMemberAction(formData: FormData) {
+  const session = await requireSession();
+  if (!(await canManage(session.role))) return { ok: false as const, error: "You cannot assign project teams." };
+  const projectId = String(formData.get("projectId") || "");
+  const userId = String(formData.get("userId") || "");
+  const team = String(formData.get("team") || "") as ProjectTeam;
+  if (!projectId || !userId || (team !== "developer" && team !== "testing")) {
+    return { ok: false as const, error: "Missing team member." };
+  }
+  await removeProjectMember(projectId, userId, team);
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
   return { ok: true as const };
 }

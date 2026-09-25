@@ -376,14 +376,132 @@ export async function deleteProject(id: string) {
     await conn.execute("DELETE FROM qa_test_case WHERE projectId = ?", [id]);
     await conn.execute("DELETE FROM qa_page WHERE projectId = ?", [id]);
     await conn.execute("DELETE FROM qa_module WHERE projectId = ?", [id]);
+    try {
+      await conn.execute("DELETE FROM qa_project_member WHERE projectId = ?", [id]);
+    } catch {
+      /* table may not exist yet */
+    }
     await conn.execute("DELETE FROM qa_project WHERE id = ?", [id]);
   });
 }
 
-export async function findActiveProjectsList() {
-  const projects = (await query<Row>("SELECT * FROM qa_project WHERE status = 'active' ORDER BY createdAt DESC")).map(
+export const PROJECT_TEAMS = ["developer", "testing"] as const;
+export type ProjectTeam = (typeof PROJECT_TEAMS)[number];
+
+export type ProjectMember = {
+  id: string;
+  projectId: string;
+  userId: string;
+  team: ProjectTeam;
+  name: string;
+  role: string;
+  logo: string | null;
+};
+
+function isProjectTeam(value: string): value is ProjectTeam {
+  return (PROJECT_TEAMS as readonly string[]).includes(value);
+}
+
+let memberTableReady = false;
+
+export async function ensureProjectMemberTable() {
+  if (memberTableReady) return;
+  try {
+    await execute(`
+      CREATE TABLE IF NOT EXISTS qa_project_member (
+        id varchar(191) NOT NULL,
+        projectId varchar(191) NOT NULL,
+        userId varchar(191) NOT NULL,
+        team varchar(32) NOT NULL,
+        createdAt datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        PRIMARY KEY (id),
+        UNIQUE KEY qa_project_member_unique (projectId, userId, team),
+        KEY qa_project_member_userId_fkey (userId)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+  } catch {
+    /* already exists */
+  }
+  memberTableReady = true;
+}
+
+export async function findProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  await ensureProjectMemberTable();
+  const rows = await query<{
+    id: string;
+    projectId: string;
+    userId: string;
+    team: string;
+    name: string;
+    role: string;
+    logo: string | null;
+  }>(
+    `SELECT m.id, m.projectId, m.userId, m.team, u.name, u.role, u.logo
+     FROM qa_project_member m
+     JOIN qa_user u ON u.id = m.userId
+     WHERE m.projectId = ?
+     ORDER BY u.name ASC`,
+    [projectId],
+  );
+  return rows
+    .filter((row) => isProjectTeam(row.team))
+    .map((row) => ({
+      id: String(row.id),
+      projectId: String(row.projectId),
+      userId: String(row.userId),
+      team: row.team as ProjectTeam,
+      name: String(row.name),
+      role: String(row.role),
+      logo: row.logo ? String(row.logo) : null,
+    }));
+}
+
+export async function findAssignedProjectIds(userId: string) {
+  await ensureProjectMemberTable();
+  const [owned, members] = await Promise.all([
+    query<{ id: string }>("SELECT id FROM qa_project WHERE ownerId = ?", [userId]),
+    query<{ projectId: string }>("SELECT projectId FROM qa_project_member WHERE userId = ?", [userId]),
+  ]);
+  return new Set([...owned.map((row) => String(row.id)), ...members.map((row) => String(row.projectId))]);
+}
+
+export async function canSeeProject(userId: string, projectId: string, seesAll: boolean) {
+  if (seesAll) return true;
+  const allowed = await findAssignedProjectIds(userId);
+  return allowed.has(projectId);
+}
+
+export async function addProjectMember(projectId: string, userId: string, team: ProjectTeam) {
+  await ensureProjectMemberTable();
+  try {
+    await execute("INSERT INTO qa_project_member (id, projectId, userId, team, createdAt) VALUES (?, ?, ?, ?, NOW(3))", [
+      createId(),
+      projectId,
+      userId,
+      team,
+    ]);
+  } catch {
+    /* already on this team */
+  }
+}
+
+export async function removeProjectMember(projectId: string, userId: string, team: ProjectTeam) {
+  await ensureProjectMemberTable();
+  await execute("DELETE FROM qa_project_member WHERE projectId = ? AND userId = ? AND team = ?", [
+    projectId,
+    userId,
+    team,
+  ]);
+}
+
+export async function findActiveProjectsList(scope?: { userId: string; all: boolean }) {
+  let projects = (await query<Row>("SELECT * FROM qa_project WHERE status = 'active' ORDER BY createdAt DESC")).map(
     mapProject,
   );
+  if (scope && !scope.all) {
+    const allowed = await findAssignedProjectIds(scope.userId);
+    projects = projects.filter((project) => allowed.has(project.id));
+  }
   if (!projects.length) return [];
   const ids = projects.map((project) => project.id);
   const pages = await query<{ id: string; projectId: string }>(
@@ -1210,10 +1328,14 @@ export async function findTestRunDetail(id: string) {
   };
 }
 
-export async function findActiveProjectsForRun() {
-  const projects = (await query<Row>("SELECT * FROM qa_project WHERE status = 'active' ORDER BY name ASC")).map(
+export async function findActiveProjectsForRun(scope?: { userId: string; all: boolean }) {
+  let projects = (await query<Row>("SELECT * FROM qa_project WHERE status = 'active' ORDER BY name ASC")).map(
     mapProject,
   );
+  if (scope && !scope.all) {
+    const allowed = await findAssignedProjectIds(scope.userId);
+    projects = projects.filter((project) => allowed.has(project.id));
+  }
   if (!projects.length) return [];
   const ids = projects.map((project) => project.id);
   const cases = await query<Row>(
@@ -1542,6 +1664,7 @@ export async function searchWorkspace(raw: string, userId?: string) {
       "SELECT id, name, code FROM qa_project WHERE status = 'active' ORDER BY name ASC",
     ),
   ]);
+  const allowed = userId ? await findAssignedProjectIds(userId) : null;
 
   const matchedTasks = tasks
     .filter((task) =>
@@ -1549,6 +1672,7 @@ export async function searchWorkspace(raw: string, userId?: string) {
     )
     .slice(0, 8);
   const matchedProjects = projects
+    .filter((project) => (allowed ? allowed.has(String(project.id)) : true))
     .filter((project) => `${project.name} ${project.code ?? ""}`.toLowerCase().includes(q))
     .slice(0, 6)
     .map((project) => ({

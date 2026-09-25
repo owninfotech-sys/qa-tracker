@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { findUserByEmail, findUserById } from "@/lib/data";
+import { redirect, notFound } from "next/navigation";
+import { canSeeProject, findUserByEmail, findUserById } from "@/lib/data";
 import { isRole, type Role, type SessionUser } from "@/lib/types";
 import { firstHomePath, type AccessKey } from "@/lib/access";
 import { hasAccess, roleCaps } from "@/lib/role-access";
@@ -97,6 +97,17 @@ export async function requireAccess(role: Role, key: AccessKey) {
 
 export async function canManage(role: Role) {
   return hasAccess(role, "manageProjects");
+}
+
+export async function canSeeAllProjects(role: Role) {
+  return (await hasAccess(role, "viewAll")) || (await hasAccess(role, "manageProjects"));
+}
+
+export async function requireProjectAccess(projectId: string) {
+  const user = await requireSession();
+  const seesAll = await canSeeAllProjects(user.role);
+  if (!(await canSeeProject(user.id, projectId, seesAll))) notFound();
+  return user;
 }
 
 export async function canAddCases(role: Role) {

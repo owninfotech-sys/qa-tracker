@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarClock } from "lucide-react";
-import { hasAccess, requireSession } from "@/lib/auth";
+import { hasAccess, requireProjectAccess } from "@/lib/auth";
 import { findProjectById, findFirstPage, findTodayTasks, findTodayTesting, findOpenDayReport, findUsers } from "@/lib/data";
 import { Topbar } from "@/components/layout/topbar";
 import { BackLink } from "@/components/ui/back-link";
@@ -21,8 +21,8 @@ export default async function ProjectTodayPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ work?: string }>;
 }) {
-  const user = await requireSession();
   const { id } = await params;
+  const user = await requireProjectAccess(id);
   const canSeeTesting = await hasAccess(user.role, "testing");
   const { work } = await searchParams;
   const project = await findProjectById(id);

@@ -1,4 +1,4 @@
-import { canManage, requireSession } from "@/lib/auth";
+import { canManage, requireProjectAccess } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
 import { ProjectForm } from "@/components/projects/project-form";
@@ -10,9 +10,9 @@ export default async function EditProjectPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireSession();
-  if (!(await canManage(user.role))) redirect("/projects");
   const { id } = await params;
+  const user = await requireProjectAccess(id);
+  if (!(await canManage(user.role))) redirect("/projects");
   const project = await findProjectById(id);
   if (!project) notFound();
 
