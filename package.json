@@ -11,6 +11,7 @@
     "db:setup": "node scripts/ensure-mysql.mjs && node scripts/apply-mysql.mjs && node scripts/seed-mysql.mjs"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.19.16",
     "bcryptjs": "^3.0.2",
     "jose": "^6.1.0",
     "lucide-react": "^0.544.0",
