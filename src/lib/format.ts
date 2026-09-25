@@ -84,6 +84,15 @@ export function formatListDate(value?: Date | string | null) {
   }).format(date);
 }
 
+export function formatShortDay(value?: Date | string | null) {
+  if (!value) return "—";
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
 export function formatDate(value?: Date | string | null) {
   if (!value) return "—";
   const date = typeof value === "string" ? new Date(value) : value;

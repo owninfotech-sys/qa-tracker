@@ -7,7 +7,6 @@ import {
   BookOpen,
   Box,
   Bug,
-  Clock3,
   Download,
   LayoutGrid,
   List,
@@ -23,6 +22,7 @@ import { formatListDate, initials, pageTaskKindLabel, pageTaskStatusLabel, prior
 import { TASK_STATUSES } from "@/lib/types";
 import type { ListTask } from "@/lib/work-item";
 import { kindsForFilter, statusesForFilter } from "@/lib/work-type";
+import { DueTag } from "@/components/projects/due-tag";
 import { toast } from "@/components/ui/toast";
 
 export type { ListTask };
@@ -53,17 +53,6 @@ const kindPill: Record<string, string> = {
   fix_bug: "bg-[#FEF2F2] text-[#DC2626]",
   fix_ui: "bg-[#FEF3C7] text-[#D97706]",
 };
-
-function resolutionDate(createdAt: string) {
-  const date = new Date(createdAt);
-  date.setDate(date.getDate() + 3);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function viewHref(basePath: string, queue: string | undefined, view: "list" | "board") {
   const params = new URLSearchParams();
@@ -291,6 +280,7 @@ export function PageTaskList({
       {view === "board" ? (
         <PageTaskBoard
           tasks={rows}
+          allTasks={boardTasks}
           canEdit={canEdit}
           currentUserId={currentUserId}
           role={role}
@@ -430,14 +420,7 @@ export function PageTaskList({
                         </td>
                         <td className="whitespace-nowrap px-2 py-3 text-[#172033]">{formatListDate(task.createdAt)}</td>
                         <td className="whitespace-nowrap px-2 py-3">
-                          <span className="inline-flex items-center gap-1.5 text-[#172033]">
-                            <Clock3 size={14} className="text-[#64748B]" />
-                            {resolutionDate(task.createdAt)}
-                            <span className="inline-flex h-3.5 w-3.5 items-end gap-px">
-                              <span className="h-2 w-[3px] rounded-sm bg-[#22a06b]" />
-                              <span className="h-3 w-[3px] rounded-sm bg-[#22a06b]" />
-                            </span>
-                          </span>
+                          <DueTag task={task} />
                         </td>
                       </tr>
                     );

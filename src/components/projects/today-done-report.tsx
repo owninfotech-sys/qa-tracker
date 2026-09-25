@@ -58,6 +58,7 @@ export function TodayDoneReport({
   draft,
   doneCount,
   report,
+  allDone = false,
 }: {
   projectId: string;
   projectName?: string;
@@ -65,6 +66,7 @@ export function TodayDoneReport({
   draft: string;
   doneCount: number;
   report?: SavedReport | null;
+  allDone?: boolean;
 }) {
   const [viewOpen, setViewOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -75,6 +77,10 @@ export function TodayDoneReport({
   const preview = current?.body || draft;
 
   function startReport() {
+    if (!submitted && !allDone) {
+      toast("Finish all tasks first, then write today’s report", "error");
+      return;
+    }
     startTransition(async () => {
       const created = current?.id ? current : await requestDayReportAction(projectId);
       if (!created) {
@@ -103,9 +109,11 @@ export function TodayDoneReport({
           <p className="mt-1 text-sm text-[#64748B]">
             {submitted
               ? `Saved ${current?.submittedAt ? formatDateTime(current.submittedAt) : "today"}.`
-              : doneCount
-                ? `Drafted from ${doneCount} completed item${doneCount === 1 ? "" : "s"} today.`
-                : "Open the report when you want to read or write today’s update."}
+              : allDone
+                ? doneCount
+                  ? `All tasks are done. Drafted from ${doneCount} completed item${doneCount === 1 ? "" : "s"} today.`
+                  : "All tasks are done. Write today’s progress report."
+                : "This report opens after every task is moved to Done."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -119,7 +127,7 @@ export function TodayDoneReport({
           </button>
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || (!submitted && !allDone)}
             onClick={startReport}
             className="rounded-[3px] bg-[#2563EB] px-3.5 py-2 text-sm font-medium text-white hover:bg-[#1D4ED8] disabled:opacity-60"
           >

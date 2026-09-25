@@ -147,6 +147,7 @@ export default async function ProjectsPage({
               ? todayProjects.map((sample) => {
                   const grouped = todayTasks.filter((task) => task.projectId === sample.projectId);
                   const doneCount = grouped.filter((task) => task.reason === "done_today").length;
+                  const remaining = grouped.filter((task) => task.reason !== "done_today").length;
                   return (
                     <TodayDoneReport
                       key={sample.projectId}
@@ -156,6 +157,7 @@ export default async function ProjectsPage({
                       draft={draftTodayDoneReport(grouped, { projectName: sample.projectName, greetingName })}
                       doneCount={doneCount}
                       report={reportByProject.get(sample.projectId)}
+                      allDone={remaining === 0}
                     />
                   );
                 })

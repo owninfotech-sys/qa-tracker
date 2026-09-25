@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock3,
+  Eye,
   FileText,
   LayoutGrid,
   MessageSquare,
@@ -18,11 +19,12 @@ import {
 } from "lucide-react";
 import { reorderPageTasksAction, loadOpenDayReportAction, requestDayReportAction } from "@/app/actions/page-tasks";
 import type { ListTask } from "@/lib/work-item";
-import { formatDateTime, initials, pageTaskKindLabel, pageTaskStatusLabel } from "@/lib/format";
+import { initials, pageTaskKindLabel, pageTaskStatusLabel } from "@/lib/format";
 import { BOARD_COLUMNS, columnForStatus, neighborColumn, sortBoardTasks, statusForColumn } from "@/lib/board";
 import { kindsForFilter } from "@/lib/work-type";
 import { WorkReportDialog } from "@/components/projects/work-report-dialog";
 import { BoardLogsPanel } from "@/components/projects/board-logs";
+import { DueTag } from "@/components/projects/due-tag";
 import { toast } from "@/components/ui/toast";
 import { useProcess } from "@/components/ui/app-loader";
 
@@ -36,17 +38,6 @@ const statusTone: Record<string, string> = {
   done: "bg-[#DCFCE7] text-[#16A34A]",
   wont_do: "bg-[#DCFCE7] text-[#16A34A]",
 };
-
-function dueLabel(task: ListTask) {
-  const due = task.resolutionAt ?? new Date(new Date(task.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString();
-  return formatDateTime(due);
-}
-
-function dueSoon(task: ListTask) {
-  const due = task.resolutionAt ? new Date(task.resolutionAt) : new Date(new Date(task.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000);
-  const done = task.status === "done" || task.status === "wont_do";
-  return !done && due.getTime() < Date.now();
-}
 
 function PriorityMark({ priority }: { priority: string }) {
   const color =
@@ -104,6 +95,7 @@ export function PageTaskBoard({
   projectId: projectIdProp,
   pageId: pageIdProp,
   canViewAll = false,
+  allTasks,
 }: {
   tasks: ListTask[];
   canEdit: boolean;
@@ -114,6 +106,7 @@ export function PageTaskBoard({
   projectId?: string;
   pageId?: string;
   canViewAll?: boolean;
+  allTasks?: ListTask[];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -146,10 +139,15 @@ export function PageTaskBoard({
   const isAdmin = canViewAll || role === "ADMIN";
   itemsRef.current = items;
 
-  const todoCount = items.filter((item) => columnForStatus(item.status) === "todo").length;
-  const progressCount = items.filter((item) => columnForStatus(item.status) === "progress").length;
-  const doneCount = items.filter((item) => columnForStatus(item.status) === "done").length;
-  const boardCleared = todoCount === 0 && progressCount === 0 && doneCount > 0;
+  const catalog = allTasks?.length ? allTasks : items;
+  const statusById = new Map(items.map((item) => [item.id, item.status]));
+  const liveCatalog = catalog.map((item) => ({
+    ...item,
+    status: statusById.get(item.id) ?? item.status,
+  }));
+  const openCount = liveCatalog.filter((item) => columnForStatus(item.status) !== "done").length;
+  const doneCount = liveCatalog.filter((item) => columnForStatus(item.status) === "done").length;
+  const boardCleared = liveCatalog.length > 0 && openCount === 0 && doneCount > 0;
   const showDayReportButton = boardCleared && !submittedToday;
 
   useEffect(() => {
@@ -171,17 +169,7 @@ export function PageTaskBoard({
       if (existing) {
         setSubmittedToday(false);
         setDayReport({ id: existing.id, dueAt: existing.dueAt });
-        return;
       }
-      const created = await requestDayReportAction(projectId);
-      if (cancelled) return;
-      if (!created) {
-        setSubmittedToday(true);
-        setDayReport(null);
-        return;
-      }
-      setSubmittedToday(false);
-      setDayReport({ id: created.id, dueAt: created.dueAt });
     })();
     return () => {
       cancelled = true;
@@ -250,26 +238,36 @@ export function PageTaskBoard({
     );
   }
 
+  function catalogWithMove(taskId: string, nextStatus: string) {
+    const source = allTasks?.length ? allTasks : itemsRef.current;
+    const overrides = new Map(itemsRef.current.map((item) => [item.id, item.status]));
+    overrides.set(taskId, nextStatus);
+    return source.map((item) => ({
+      ...item,
+      status: overrides.get(item.id) ?? item.status,
+    }));
+  }
+
+  function allTasksDone(list: ListTask[]) {
+    return list.length > 0 && list.every((item) => columnForStatus(item.status) === "done");
+  }
+
   function openBoardClearedReport(nextItems: ListTask[]) {
-    const todo = nextItems.filter((item) => columnForStatus(item.status) === "todo").length;
-    const progress = nextItems.filter((item) => columnForStatus(item.status) === "progress").length;
-    const done = nextItems.filter((item) => columnForStatus(item.status) === "done").length;
-    if (todo === 0 && progress === 0 && done > 0 && projectId && !submittedToday) {
-      startTransition(async () => {
-        const created = await requestDayReportAction(projectId);
-        if (!created) {
-          setSubmittedToday(true);
-          return;
-        }
-        setSubmittedToday(false);
-        setDayReport({ id: created.id, dueAt: created.dueAt });
-        setReport({ kind: "day_complete", reportId: created.id, dueAt: created.dueAt });
-      });
-    }
+    if (!allTasksDone(nextItems) || !projectId || submittedToday) return;
+    startTransition(async () => {
+      const created = await requestDayReportAction(projectId);
+      if (!created) {
+        setSubmittedToday(true);
+        return;
+      }
+      setSubmittedToday(false);
+      setDayReport({ id: created.id, dueAt: created.dueAt });
+      setReport({ kind: "day_complete", reportId: created.id, dueAt: created.dueAt });
+    });
   }
 
   function openDayReportForm() {
-    if (!projectId) return;
+    if (!projectId || !boardCleared) return;
     startTransition(async () => {
       const current = dayReport?.id ? dayReport : await requestDayReportAction(projectId);
       if (!current?.id) {
@@ -312,29 +310,20 @@ export function PageTaskBoard({
       router.refresh();
     });
 
-    const prevBusy = currentItems.filter((item) => {
-      const column = columnForStatus(item.status);
-      return column === "todo" || column === "progress";
-    }).length;
-    const nextBusy = nextItems.filter((item) => {
-      const column = columnForStatus(item.status);
-      return column === "todo" || column === "progress";
-    }).length;
-    const nextDone = nextItems.filter((item) => columnForStatus(item.status) === "done").length;
+    const nextCatalog = catalogWithMove(task.id, nextStatus);
+    const wasOpen = columnForStatus(task.status) !== "done";
+    const nowDone = columnForStatus(nextStatus) === "done";
 
-    if (columnId === "done" && columnForStatus(task.status) !== "done") {
+    if (columnId === "done" && wasOpen && nowDone) {
       toast(`${task.taskKey} moved to Done`);
-      if (nextBusy === 0 && nextDone > 0) {
-        openBoardClearedReport(nextItems);
-      } else {
-        setReport({ kind: "task_done", task });
-      }
+      if (allTasksDone(nextCatalog)) openBoardClearedReport(nextCatalog);
       return;
     }
-    if (nextBusy === 0 && prevBusy > 0 && nextDone > 0) {
-      openBoardClearedReport(nextItems);
-    } else if (nextBusy > 0) {
+    if (allTasksDone(nextCatalog)) {
+      openBoardClearedReport(nextCatalog);
+    } else {
       setDayReport(null);
+      if (report?.kind === "day_complete") setReport(null);
     }
   }
 
@@ -610,7 +599,16 @@ export function PageTaskBoard({
                                   {task.title}
                                 </Link>
                               </div>
-                              {canMove(task) ? (
+                              <div className="flex shrink-0 items-center gap-1">
+                                <Link
+                                  href={task.href}
+                                  onPointerDown={(event) => event.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded-[3px] border border-[#2563EB] bg-[#EFF6FF] px-2 py-0.5 text-[11px] font-semibold text-[#1D4ED8] hover:bg-[#DBEAFE]"
+                                >
+                                  <Eye size={12} />
+                                  View
+                                </Link>
+                                {canMove(task) ? (
                                 <div className="flex shrink-0 gap-0.5">
                                   <button
                                     type="button"
@@ -660,6 +658,7 @@ export function PageTaskBoard({
                                   </button>
                                 </div>
                               ) : null}
+                              </div>
                             </div>
                             <span
                               className={`mt-2 inline-flex rounded-[3px] px-1.5 py-0.5 text-[11px] font-semibold ${
@@ -668,18 +667,15 @@ export function PageTaskBoard({
                             >
                               {pageTaskStatusLabel(task.status)}
                             </span>
-                            <p className={`mt-2 inline-flex items-center gap-1 text-xs ${dueSoon(task) ? "text-[#DC2626]" : "text-[#64748B]"}`}>
-                              <Clock3 size={12} />
-                              {dueLabel(task)}
-                            </p>
-                            <div className="mt-3 flex items-center justify-between text-[#64748B]">
-                              <div className="flex items-center gap-2">
-                                <LayoutGrid size={13} className="text-[#64748B]" />
-                                <Link href={task.href} className="text-[12px] font-medium text-[#64748B] hover:text-[#2563EB]">
+                            <div className="mt-3 flex items-center justify-between gap-2 text-[#64748B]">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <LayoutGrid size={13} className="shrink-0 text-[#64748B]" />
+                                <Link href={task.href} className="truncate text-[12px] font-medium text-[#64748B] hover:text-[#2563EB]">
                                   {task.taskKey}
                                 </Link>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <DueTag task={task} />
+                              <div className="flex shrink-0 items-center gap-2">
                                 <span className="inline-flex items-center gap-1 text-[11px]">
                                   <MessageSquare size={12} />
                                   {task.commentCount}

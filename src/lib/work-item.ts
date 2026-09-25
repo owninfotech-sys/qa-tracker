@@ -17,6 +17,7 @@ export type ListTask = {
   assigneeNames: string[];
   commentCount: number;
   resolutionAt: string | null;
+  updatedAt: string;
   sortOrder: number;
   href: string;
 };

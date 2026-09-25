@@ -81,6 +81,7 @@ export default async function ProjectTodayPage({
             draft={draftTodayDoneReport(tasks, { projectName: project.name, greetingName })}
             doneCount={doneCount}
             report={report}
+            allDone={remainingTasks === 0}
           />
         ) : null}
         {showTasks && showTesting && tasks.length === 0 && testing.length === 0 ? (

@@ -81,6 +81,7 @@ export default async function PageTaskDashboard({
       assigneeNames,
       commentCount: task._count.comments,
       resolutionAt: task.resolutionAt?.toISOString() ?? null,
+      updatedAt: task.updatedAt.toISOString(),
       sortOrder: sortOrders.get(task.id) ?? 0,
       href: `/projects/${task.projectId}/pages/${task.pageId}/tasks/${task.id}`,
     };
