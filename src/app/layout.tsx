@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   title: "QA Tracker — Own InfoTech",
   description: "Assign test points, track results, and manage fixes for the whole team.",
   icons: {
-    icon: [{ url: "/favicon.png?v=2", type: "image/png" }],
-    apple: [{ url: "/apple-icon.png?v=2", type: "image/png" }],
+    icon: [{ url: "/favicon.png?v=3", type: "image/png" }],
+    apple: [{ url: "/apple-icon.png?v=3", type: "image/png" }],
   },
 };
 
